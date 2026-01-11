@@ -2,6 +2,7 @@
 package config
 
 import (
+	"errors"
 	"log"
 	"os"
 
@@ -64,5 +65,17 @@ func getEnv(key, defaultValue string) string {
 func (c *Config) Validate() error {
 	// Note: MongoDB and Cloudinary are optional during development
 	// They become required in production
+	if c.MongoDBURI == "" {
+		return errors.New("MONGODB_URI is required")
+	}
+	if c.CloudinaryCloudName == "" {
+		return errors.New("CLOUDINARY_CLOUD_NAME is required")
+	}
+	if c.CloudinaryAPIKey == "" {
+		return errors.New("CLOUDINARY_API_KEY is required")
+	}
+	if c.CloudinaryAPISecret == "" {
+		return errors.New("CLOUDINARY_API_SECRET is required")
+	}
 	return nil
 }

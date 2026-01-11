@@ -40,13 +40,23 @@ func Connect(cfg Config) (*MongoDB, error) {
 		return nil, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	// Use a longer timeout for initial connection
+	timeout := cfg.Timeout
+	if timeout < 30*time.Second {
+		timeout = 30 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Set client options
+	// Set client options with TLS config for Atlas compatibility
 	clientOptions := options.Client().
 		ApplyURI(cfg.URI).
-		SetServerAPIOptions(options.ServerAPI(options.ServerAPIVersion1))
+		SetServerAPIOptions(options.ServerAPI(options.ServerAPIVersion1)).
+		SetRetryWrites(true).
+		SetRetryReads(true).
+		SetMinPoolSize(1).
+		SetMaxPoolSize(10)
 
 	// Connect to MongoDB
 	client, err := mongo.Connect(ctx, clientOptions)

@@ -12,7 +12,7 @@
     "form-data": "^4.0.4",
     "lucide-react": "^0.562.0",
     "mime": "^2.5.2",
-    "next": "15.5.3",
+    "next": "15.5.9",
     "qrcode.react": "^4.2.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
