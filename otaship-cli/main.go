@@ -39,6 +39,20 @@ func main() {
 		runPublish()
 	case "install":
 		runInstall()
+	case "list", "ls":
+		runList()
+	case "status":
+		runStatus()
+	case "whoami":
+		runWhoami()
+	case "rollback":
+		runRollback()
+	case "delete", "rm":
+		runDelete()
+	case "doctor":
+		runDoctor()
+	case "upgrade":
+		runUpgrade()
 	case "version", "-v", "--version":
 		fmt.Printf("otaship version %s\n", Version)
 	case "help", "-h", "--help":
@@ -64,6 +78,13 @@ Usage:
 Commands:
   init        Initialize otaship.json configuration
   publish     Publish an update (default command)
+  list        List recent updates for current project
+  rollback    Rollback to a previous update
+  delete      Delete an update by ID
+  status      Check server connectivity and config
+  whoami      Show current API key info
+  doctor      Diagnose common issues
+  upgrade     Update CLI to latest version
   install     Install CLI globally to system PATH
   version     Show version information
   help        Show this help message
@@ -76,12 +97,17 @@ Publish Flags:
   --rollout      Rollout percentage 0-100 (default: 100)
   --skip-export  Skip expo export step
 
+List Flags:
+  --limit        Number of updates to show (default: 10)
+
 Examples:
   otaship init                    # Create configuration file
   otaship                         # Publish using config file
-  otaship --channel staging       # Publish to staging channel
-  otaship --rollout 50            # Publish to 50% of users
-  otaship install                 # Install CLI globally`)
+  otaship list                    # View recent updates
+  otaship rollback <update-id>    # Rollback to specific update
+  otaship delete <update-id>      # Delete an update
+  otaship doctor                  # Check for issues
+  otaship status                  # Check server health`)
 }
 
 func runInit() {
@@ -369,6 +395,594 @@ func runPublish() {
 	fmt.Printf("  Rollout:  %d%%\n", *rollout)
 	fmt.Printf("  Server:   %s\n", config.Server)
 	fmt.Println()
+}
+
+// runList lists recent updates from the server
+func runList() {
+	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	limit := fs.Int("limit", 10, "Number of updates to show")
+	projectPath := fs.String("project", ".", "Path to Expo project")
+
+	args := os.Args[2:]
+	fs.Parse(args)
+
+	config := loadConfig(*projectPath)
+	if config.Server == "" {
+		fmt.Println("Error: Server URL is required")
+		fmt.Println("Run 'otaship init' to create a configuration file.")
+		os.Exit(1)
+	}
+	if config.APIKey == "" {
+		fmt.Println("Error: API Key is required")
+		fmt.Println("Run 'otaship init' to create a configuration file.")
+		os.Exit(1)
+	}
+
+	// Fetch updates
+	url := fmt.Sprintf("%s/api/admin/updates?limit=%d", strings.TrimRight(config.Server, "/"), *limit)
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("Error: Could not connect to server: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("Error: Server returned %d: %s\n", resp.StatusCode, string(body))
+		os.Exit(1)
+	}
+
+	var result struct {
+		Updates []struct {
+			ID             string    `json:"id"`
+			UpdateID       string    `json:"updateId"`
+			ProjectSlug    string    `json:"projectSlug"`
+			RuntimeVersion string    `json:"runtimeVersion"`
+			Channel        string    `json:"channel"`
+			IsActive       bool      `json:"isActive"`
+			Downloads      int       `json:"downloads"`
+			CreatedAt      time.Time `json:"createdAt"`
+		} `json:"updates"`
+		Total int `json:"total"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		fmt.Printf("Error: Failed to parse response: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println()
+	fmt.Printf("Recent Updates (showing %d of %d)\n", len(result.Updates), result.Total)
+	fmt.Println("=" + strings.Repeat("=", 75))
+	fmt.Println()
+
+	if len(result.Updates) == 0 {
+		fmt.Println("No updates found.")
+		return
+	}
+
+	// Table header
+	fmt.Printf("%-20s %-12s %-12s %-8s %s\n", "PROJECT", "RUNTIME", "CHANNEL", "ACTIVE", "CREATED")
+	fmt.Println(strings.Repeat("-", 76))
+
+	for _, u := range result.Updates {
+		active := " "
+		if u.IsActive {
+			active = "*"
+		}
+		fmt.Printf("%-20s %-12s %-12s %-8s %s\n",
+			truncate(u.ProjectSlug, 20),
+			u.RuntimeVersion,
+			u.Channel,
+			active,
+			u.CreatedAt.Format("2006-01-02"),
+		)
+	}
+	fmt.Println()
+}
+
+// runStatus checks server connectivity and shows config
+func runStatus() {
+	projectPath := "."
+	if len(os.Args) > 2 {
+		projectPath = os.Args[2]
+	}
+
+	config := loadConfig(projectPath)
+
+	fmt.Println()
+	fmt.Println("OTAShip Status")
+	fmt.Println("==============")
+	fmt.Println()
+
+	// Show config
+	fmt.Println("Configuration:")
+	if config.Server != "" {
+		fmt.Printf("  Server:  %s\n", config.Server)
+	} else {
+		fmt.Println("  Server:  (not configured)")
+	}
+	if config.APIKey != "" {
+		fmt.Printf("  API Key: %s...%s\n", config.APIKey[:4], config.APIKey[len(config.APIKey)-4:])
+	} else {
+		fmt.Println("  API Key: (not configured)")
+	}
+	fmt.Printf("  Channel: %s\n", config.Channel)
+	fmt.Println()
+
+	// Check server health
+	if config.Server == "" {
+		fmt.Println("Server:  Not configured. Run 'otaship init'.")
+		return
+	}
+
+	fmt.Print("Checking server... ")
+	url := fmt.Sprintf("%s/api/health", strings.TrimRight(config.Server, "/"))
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		fmt.Printf("OFFLINE (%v)\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var health struct {
+		Status  string `json:"status"`
+		Version string `json:"version"`
+	}
+	json.NewDecoder(resp.Body).Decode(&health)
+
+	if health.Status == "ok" {
+		fmt.Printf("ONLINE (v%s)\n", health.Version)
+	} else {
+		fmt.Printf("DEGRADED (%s)\n", health.Status)
+	}
+	fmt.Println()
+}
+
+// runWhoami shows current API key info
+func runWhoami() {
+	projectPath := "."
+	if len(os.Args) > 2 {
+		projectPath = os.Args[2]
+	}
+
+	config := loadConfig(projectPath)
+
+	fmt.Println()
+	if config.APIKey == "" {
+		fmt.Println("Not configured. Run 'otaship init' to set up.")
+		return
+	}
+
+	fmt.Println("Current Configuration")
+	fmt.Println("=====================")
+	fmt.Printf("Server:  %s\n", config.Server)
+	fmt.Printf("API Key: %s...%s\n", config.APIKey[:min(4, len(config.APIKey))], config.APIKey[max(0, len(config.APIKey)-4):])
+	fmt.Printf("Channel: %s\n", config.Channel)
+	fmt.Println()
+}
+
+// runRollback rolls back to a previous update
+func runRollback() {
+	if len(os.Args) < 3 {
+		fmt.Println("Error: Update ID is required")
+		fmt.Println("Usage: otaship rollback <update-id>")
+		os.Exit(1)
+	}
+
+	updateID := os.Args[2]
+	config := loadConfig(".")
+
+	if config.Server == "" || config.APIKey == "" {
+		fmt.Println("Error: Configuration required. Run 'otaship init' first.")
+		os.Exit(1)
+	}
+
+	fmt.Printf("Rolling back to update: %s\n", updateID)
+	fmt.Print("Confirming rollback... ")
+
+	url := fmt.Sprintf("%s/api/admin/updates/%s/rollback", strings.TrimRight(config.Server, "/"), updateID)
+	req, _ := http.NewRequest("POST", url, nil)
+	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("FAILED\nError: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("FAILED\nServer returned %d: %s\n", resp.StatusCode, string(body))
+		os.Exit(1)
+	}
+
+	fmt.Println("SUCCESS")
+	fmt.Println()
+	fmt.Printf("Update %s is now the active version.\n", updateID)
+	fmt.Println()
+}
+
+// runDelete deletes an update by ID
+func runDelete() {
+	if len(os.Args) < 3 {
+		fmt.Println("Error: Update ID is required")
+		fmt.Println("Usage: otaship delete <update-id>")
+		os.Exit(1)
+	}
+
+	updateID := os.Args[2]
+	config := loadConfig(".")
+
+	if config.Server == "" || config.APIKey == "" {
+		fmt.Println("Error: Configuration required. Run 'otaship init' first.")
+		os.Exit(1)
+	}
+
+	// Confirm deletion
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("Delete update %s? This cannot be undone. [y/N]: ", updateID)
+	confirm, _ := reader.ReadString('\n')
+	confirm = strings.TrimSpace(strings.ToLower(confirm))
+	if confirm != "y" && confirm != "yes" {
+		fmt.Println("Cancelled.")
+		return
+	}
+
+	fmt.Print("Deleting update... ")
+
+	url := fmt.Sprintf("%s/api/admin/updates/%s", strings.TrimRight(config.Server, "/"), updateID)
+	req, _ := http.NewRequest("DELETE", url, nil)
+	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("FAILED\nError: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("FAILED\nServer returned %d: %s\n", resp.StatusCode, string(body))
+		os.Exit(1)
+	}
+
+	fmt.Println("SUCCESS")
+	fmt.Printf("Update %s has been deleted.\n", updateID)
+}
+
+// runDoctor diagnoses common issues
+func runDoctor() {
+	fmt.Println()
+	fmt.Println("OTAShip Doctor")
+	fmt.Println("==============")
+	fmt.Println()
+
+	allGood := true
+
+	// Check 1: Configuration file
+	fmt.Print("[1/5] Checking configuration... ")
+	config := loadConfig(".")
+	if config.Server != "" && config.APIKey != "" {
+		fmt.Println("OK")
+	} else if config.Server == "" && config.APIKey == "" {
+		fmt.Println("NOT CONFIGURED")
+		fmt.Println("      Run 'otaship init' to create configuration.")
+		allGood = false
+	} else {
+		fmt.Println("INCOMPLETE")
+		if config.Server == "" {
+			fmt.Println("      Missing: server URL")
+		}
+		if config.APIKey == "" {
+			fmt.Println("      Missing: API key")
+		}
+		allGood = false
+	}
+
+	// Check 2: Server connectivity
+	fmt.Print("[2/5] Checking server... ")
+	if config.Server != "" {
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("%s/api/health", strings.TrimRight(config.Server, "/")))
+		if err != nil {
+			fmt.Println("OFFLINE")
+			fmt.Printf("      Could not connect: %v\n", err)
+			allGood = false
+		} else {
+			resp.Body.Close()
+			if resp.StatusCode == 200 {
+				fmt.Println("OK")
+			} else {
+				fmt.Printf("ERROR (status %d)\n", resp.StatusCode)
+				allGood = false
+			}
+		}
+	} else {
+		fmt.Println("SKIPPED (no server configured)")
+	}
+
+	// Check 3: Expo CLI
+	fmt.Print("[3/5] Checking Expo CLI... ")
+	cmd := exec.Command("npx", "expo", "--version")
+	if output, err := cmd.Output(); err != nil {
+		fmt.Println("NOT FOUND")
+		fmt.Println("      Install with: npm install -g expo-cli")
+		allGood = false
+	} else {
+		version := strings.TrimSpace(string(output))
+		fmt.Printf("OK (v%s)\n", version)
+	}
+
+	// Check 4: app.json
+	fmt.Print("[4/5] Checking app.json... ")
+	if _, err := os.Stat("app.json"); os.IsNotExist(err) {
+		fmt.Println("NOT FOUND")
+		fmt.Println("      This doesn't appear to be an Expo project directory.")
+		allGood = false
+	} else {
+		// Check for required fields
+		slug, runtime, err := readAppConfig(".")
+		if err != nil {
+			fmt.Printf("ERROR (%v)\n", err)
+			allGood = false
+		} else if slug == "" {
+			fmt.Println("MISSING SLUG")
+			fmt.Println("      Add 'expo.slug' to your app.json")
+			allGood = false
+		} else {
+			fmt.Printf("OK (slug: %s, runtime: %s)\n", slug, runtime)
+		}
+	}
+
+	// Check 5: Node modules
+	fmt.Print("[5/5] Checking node_modules... ")
+	if _, err := os.Stat("node_modules"); os.IsNotExist(err) {
+		fmt.Println("NOT FOUND")
+		fmt.Println("      Run 'npm install' first.")
+		allGood = false
+	} else {
+		fmt.Println("OK")
+	}
+
+	fmt.Println()
+	if allGood {
+		fmt.Println("All checks passed! You're ready to publish.")
+	} else {
+		fmt.Println("Some issues were found. Please fix them before publishing.")
+	}
+	fmt.Println()
+}
+
+// GitHub repository for releases
+const GitHubRepo = "vknow360/otaship"
+
+// runUpgrade updates the CLI to the latest version from GitHub releases
+func runUpgrade() {
+	fmt.Println()
+	fmt.Println("OTAShip Upgrade")
+	fmt.Println("===============")
+	fmt.Println()
+	fmt.Printf("Current version: %s\n", Version)
+	fmt.Print("Checking for updates... ")
+
+	// Fetch latest release from GitHub API
+	client := &http.Client{Timeout: 30 * time.Second}
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", GitHubRepo)
+	req, _ := http.NewRequest("GET", apiURL, nil)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "otaship-cli/"+Version)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("FAILED\nError: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 404 {
+		fmt.Println("NO RELEASES")
+		fmt.Println("No releases found. The repository may not have any releases yet.")
+		return
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Printf("FAILED\nGitHub API returned %d: %s\n", resp.StatusCode, string(body))
+		os.Exit(1)
+	}
+
+	var release struct {
+		TagName string `json:"tag_name"`
+		Name    string `json:"name"`
+		Assets  []struct {
+			Name               string `json:"name"`
+			BrowserDownloadURL string `json:"browser_download_url"`
+		} `json:"assets"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		fmt.Printf("FAILED\nError parsing response: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Extract version (remove 'v' prefix if present)
+	latestVersion := strings.TrimPrefix(release.TagName, "v")
+	fmt.Printf("FOUND v%s\n", latestVersion)
+
+	// Compare versions
+	if latestVersion == Version {
+		fmt.Println()
+		fmt.Println("You're already on the latest version!")
+		return
+	}
+
+	fmt.Printf("New version available: %s -> %s\n", Version, latestVersion)
+	fmt.Println()
+
+	// Determine which asset to download based on OS and architecture
+	var assetName string
+	switch runtime.GOOS {
+	case "windows":
+		assetName = "otaship-windows-amd64.exe"
+		if runtime.GOARCH == "arm64" {
+			assetName = "otaship-windows-arm64.exe"
+		}
+	case "darwin":
+		assetName = "otaship-darwin-amd64"
+		if runtime.GOARCH == "arm64" {
+			assetName = "otaship-darwin-arm64"
+		}
+	case "linux":
+		assetName = "otaship-linux-amd64"
+		if runtime.GOARCH == "arm64" {
+			assetName = "otaship-linux-arm64"
+		}
+	default:
+		fmt.Printf("Error: Unsupported OS: %s\n", runtime.GOOS)
+		os.Exit(1)
+	}
+
+	// Find matching asset
+	var downloadURL string
+	for _, asset := range release.Assets {
+		if asset.Name == assetName {
+			downloadURL = asset.BrowserDownloadURL
+			break
+		}
+	}
+
+	if downloadURL == "" {
+		fmt.Printf("Error: No binary found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Println("Available assets:")
+		for _, asset := range release.Assets {
+			fmt.Printf("  - %s\n", asset.Name)
+		}
+		os.Exit(1)
+	}
+
+	// Download the new binary
+	fmt.Printf("Downloading %s... ", assetName)
+	resp, err = client.Get(downloadURL)
+	if err != nil {
+		fmt.Printf("FAILED\nError: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		fmt.Printf("FAILED\nHTTP %d\n", resp.StatusCode)
+		os.Exit(1)
+	}
+
+	// Get current executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		fmt.Printf("FAILED\nCould not determine executable path: %v\n", err)
+		os.Exit(1)
+	}
+	execPath, _ = filepath.EvalSymlinks(execPath)
+
+	// Create temp file for download (with .exe extension on Windows)
+	tmpExt := ""
+	if runtime.GOOS == "windows" {
+		tmpExt = ".exe"
+	}
+	tmpFile, err := os.CreateTemp(filepath.Dir(execPath), "otaship-upgrade-*"+tmpExt)
+	if err != nil {
+		fmt.Printf("FAILED\nCould not create temp file: %v\n", err)
+		os.Exit(1)
+	}
+	tmpPath := tmpFile.Name()
+
+	// Download to temp file
+	_, err = io.Copy(tmpFile, resp.Body)
+	tmpFile.Close()
+	if err != nil {
+		os.Remove(tmpPath)
+		fmt.Printf("FAILED\nDownload error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("OK")
+
+	// Replace the current executable
+	fmt.Print("Installing update... ")
+
+	// On Windows, we can't delete/overwrite a running executable
+	// But we CAN rename it, then rename the new file into place
+	if runtime.GOOS == "windows" {
+		oldPath := execPath + ".old"
+		os.Remove(oldPath) // Remove any existing .old file
+
+		// Rename running exe to .old
+		if err := os.Rename(execPath, oldPath); err != nil {
+			os.Remove(tmpPath)
+			fmt.Printf("FAILED\nCould not rename old binary: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Rename temp file to target
+		if err := os.Rename(tmpPath, execPath); err != nil {
+			// Try to restore old file
+			os.Rename(oldPath, execPath)
+			os.Remove(tmpPath)
+			fmt.Printf("FAILED\nCould not install new binary: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Schedule cleanup of .old file (can't delete while running)
+		// It will be cleaned up on next upgrade
+	} else {
+		// On Unix, we can overwrite with rename
+		os.Chmod(tmpPath, 0755)
+		if err := os.Rename(tmpPath, execPath); err != nil {
+			os.Remove(tmpPath)
+			fmt.Printf("FAILED\n%v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Println("OK")
+	fmt.Println()
+	fmt.Printf("Successfully upgraded to v%s!\n", latestVersion)
+	fmt.Println("Run 'otaship version' to verify.")
+	fmt.Println()
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+
+// truncate shortens a string to maxLen
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func loadConfig(projectPath string) Config {
