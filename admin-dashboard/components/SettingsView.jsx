@@ -34,7 +34,7 @@ const SettingsView = ({ keys, onCreateKey, onDeleteKey }) => {
 
       {/* API Keys */}
       <section className="bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-xl overflow-hidden shadow-xl">
-        <div className="p-6 border-b border-gray-800 flex justify-between items-center">
+        <div className="p-4 sm:p-6 border-b border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h3 className="text-lg font-semibold text-white flex items-center">
               <Key className="w-5 h-5 mr-2 text-yellow-500" />
@@ -54,10 +54,10 @@ const SettingsView = ({ keys, onCreateKey, onDeleteKey }) => {
           {keys.map((k) => (
             <div
               key={k.id}
-              className="p-4 flex items-center justify-between hover:bg-gray-800/40 transition-colors group">
-              <div>
+              className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-800/40 transition-colors group">
+              <div className="min-w-0 flex-1">
                 <p className="font-medium text-white">{k.name}</p>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   <code className="text-xs bg-gray-950 px-2 py-0.5 rounded text-blue-400 border border-gray-800 font-mono">
                     {k.prefix}••••••••
                   </code>
@@ -67,7 +67,7 @@ const SettingsView = ({ keys, onCreateKey, onDeleteKey }) => {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <div className="text-right hidden sm:block">
+                <div className="text-left sm:text-right">
                   <span className="text-xs text-gray-500 uppercase tracking-wider block">
                     Last Used
                   </span>
