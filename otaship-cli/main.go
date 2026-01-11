@@ -214,21 +214,18 @@ func runInstall() {
 
 	fmt.Println()
 	fmt.Println("Installation complete!")
-	fmt.Println()
 
-	// Print PATH instructions
+	// Add to PATH
 	if runtime.GOOS == "windows" {
-		fmt.Println("To use 'otaship' from anywhere, add the install directory to your PATH:")
-		fmt.Println()
-		fmt.Println("  Option 1: Run this command in PowerShell (as Administrator):")
-		fmt.Printf("    [Environment]::SetEnvironmentVariable(\"Path\", $env:Path + \";%s\", \"User\")\n", installDir)
-		fmt.Println()
-		fmt.Println("  Option 2: Manually add to PATH:")
-		fmt.Println("    1. Open System Properties > Environment Variables")
-		fmt.Println("    2. Under 'User variables', edit 'Path'")
-		fmt.Printf("    3. Add: %s\n", installDir)
-		fmt.Println()
-		fmt.Println("After updating PATH, restart your terminal.")
+		if addToWindowsPath(installDir) {
+			fmt.Println()
+			fmt.Println("Added to PATH successfully!")
+			fmt.Println("Please restart your terminal to use 'otaship' from anywhere.")
+		} else {
+			fmt.Println()
+			fmt.Println("Could not add to PATH automatically.")
+			fmt.Println("Please add manually: " + installDir)
+		}
 	} else {
 		shell := os.Getenv("SHELL")
 		rcFile := "~/.bashrc"
@@ -236,11 +233,46 @@ func runInstall() {
 			rcFile = "~/.zshrc"
 		}
 
-		fmt.Println("To use 'otaship' from anywhere, add the install directory to your PATH:")
 		fmt.Println()
+		fmt.Println("To use 'otaship' from anywhere, add to your PATH:")
 		fmt.Printf("  echo 'export PATH=\"%s:$PATH\"' >> %s\n", installDir, rcFile)
 		fmt.Printf("  source %s\n", rcFile)
 	}
+}
+
+// addToWindowsPath adds a directory to the user's PATH environment variable on Windows.
+func addToWindowsPath(dir string) bool {
+	// Get current user PATH
+	cmd := exec.Command("powershell", "-Command",
+		"[Environment]::GetEnvironmentVariable('Path', 'User')")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	currentPath := strings.TrimSpace(string(output))
+
+	// Check if already in PATH
+	paths := strings.Split(currentPath, ";")
+	for _, p := range paths {
+		if strings.EqualFold(strings.TrimSpace(p), dir) {
+			fmt.Println("Directory already in PATH.")
+			return true
+		}
+	}
+
+	// Add to PATH
+	var newPath string
+	if currentPath == "" {
+		newPath = dir
+	} else {
+		newPath = currentPath + ";" + dir
+	}
+
+	cmd = exec.Command("powershell", "-Command",
+		fmt.Sprintf("[Environment]::SetEnvironmentVariable('Path', '%s', 'User')", newPath))
+	err = cmd.Run()
+	return err == nil
 }
 
 func runPublish() {
