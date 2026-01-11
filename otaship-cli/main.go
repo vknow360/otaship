@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"crypto/rand"
@@ -8,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
@@ -1039,35 +1041,131 @@ func readAppConfig(projectPath string) (string, string, error) {
 	return config.Expo.Slug, runtimeVersion, nil
 }
 
+// zipDirectory zips the contents of the specified directory into a target file.
+func zipDirectory(sourceDir, zipPath string) error {
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return err
+	}
+	defer zipFile.Close()
+
+	archive := zip.NewWriter(zipFile)
+	defer archive.Close()
+
+	info, err := os.Stat(sourceDir)
+	if err != nil {
+		return nil
+	}
+
+	var baseDir string
+	if info.IsDir() {
+		baseDir = filepath.Base(sourceDir)
+	}
+
+	filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+
+		if baseDir != "" {
+			header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, sourceDir))
+		}
+
+		if info.IsDir() {
+			header.Name += "/"
+		} else {
+			header.Method = zip.Deflate
+		}
+
+		writer, err := archive.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		_, err = io.Copy(writer, file)
+		return err
+	})
+
+	return err
+}
+
 func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, channel, distPath string, rollout int) error {
 	if _, err := os.Stat(distPath); os.IsNotExist(err) {
 		return fmt.Errorf("dist directory not found at %s", distPath)
 	}
 
-	reqBody := map[string]interface{}{
-		"projectSlug":       projectSlug,
-		"updateId":          updateID,
-		"runtimeVersion":    runtimeVersion,
-		"channel":           channel,
-		"rolloutPercentage": rollout,
-		"bundlePath":        distPath,
-	}
-
-	jsonData, err := json.Marshal(reqBody)
+	// 1. Create Zip Bundle
+	fmt.Println("      Compressing bundle...")
+	tmpFile, err := os.CreateTemp("", "otaship-bundle-*.zip")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create temp zip: %v", err)
+	}
+	defer os.Remove(tmpFile.Name()) // Cleanup
+	tmpFile.Close()                 // Close so zipDirectory can open it
+
+	if err := zipDirectory(distPath, tmpFile.Name()); err != nil {
+		return fmt.Errorf("failed to zip bundle: %v", err)
 	}
 
+	// 2. Prepare Multipart Upload
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Add fields
+	_ = writer.WriteField("projectSlug", projectSlug)
+	_ = writer.WriteField("updateId", updateID)
+	_ = writer.WriteField("runtimeVersion", runtimeVersion)
+	_ = writer.WriteField("channel", channel)
+	_ = writer.WriteField("rolloutPercentage", fmt.Sprintf("%d", rollout))
+	_ = writer.WriteField("platform", "android") // Should optionally come from config, defaulting to all/android
+
+	// Add file
+	file, err := os.Open(tmpFile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to open zip file: %v", err)
+	}
+	defer file.Close()
+
+	part, err := writer.CreateFormFile("bundle", "bundle.zip")
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %v", err)
+	}
+	_, err = io.Copy(part, file)
+	if err != nil {
+		return fmt.Errorf("failed to copy file content: %v", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("failed to close multipart writer: %v", err)
+	}
+
+	// 3. Send Request
 	url := fmt.Sprintf("%s/api/admin/updates", strings.TrimRight(serverURL, "/"))
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	client := &http.Client{Timeout: 5 * time.Minute}
+	client := &http.Client{Timeout: 10 * time.Minute} // Large timeout for upload
+	req.ContentLength = int64(body.Len())             // Set content length explicitly
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -1075,8 +1173,8 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("server returned %d: %s", resp.StatusCode, string(body))
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("server returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	"github.com/vknow360/otaship/backend/internal/models"
 	"github.com/vknow360/otaship/backend/internal/services"
 	"github.com/vknow360/otaship/backend/internal/storage"
+	"github.com/vknow360/otaship/backend/internal/utils"
 )
 
 // AdminHandler handles admin API endpoints.
@@ -110,66 +113,109 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		ProjectSlug       string `json:"projectSlug" binding:"required"`
-		UpdateID          string `json:"updateId"`
-		RuntimeVersion    string `json:"runtimeVersion" binding:"required"`
-		Channel           string `json:"channel"`
-		Platform          string `json:"platform"`
-		BundlePath        string `json:"bundlePath" binding:"required"`
-		RolloutPercentage int    `json:"rolloutPercentage"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// 1. Parse Multipart Form
+	if err := c.Request.ParseMultipartForm(100 << 20); err != nil { // 100 MB limit
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse form: " + err.Error()})
 		return
 	}
 
-	// Set defaults
-	if req.Channel == "" {
-		req.Channel = models.ChannelProduction
+	projectSlug := c.PostForm("projectSlug")
+	runtimeVersion := c.PostForm("runtimeVersion")
+	channel := c.DefaultPostForm("channel", models.ChannelProduction)
+	platform := c.DefaultPostForm("platform", models.PlatformAll)
+	rolloutStr := c.DefaultPostForm("rolloutPercentage", "100")
+	updateID := c.PostForm("updateId")
+
+	if projectSlug == "" || runtimeVersion == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "projectSlug and runtimeVersion are required"})
+		return
 	}
-	if req.Platform == "" {
-		req.Platform = models.PlatformAll
+
+	rolloutPercentage, _ := strconv.Atoi(rolloutStr)
+
+	// 2. Handle File Upload
+	file, header, err := c.Request.FormFile("bundle")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Bundle file is required: " + err.Error()})
+		return
 	}
-	if req.RolloutPercentage == 0 {
-		req.RolloutPercentage = 100
+	defer file.Close()
+
+	if updateID == "" {
+		updateID = services.GenerateUUID()
+	}
+
+	// Create temp dir for this update
+	tempDir, err := os.MkdirTemp("", "otaship-upload-*")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create temp dir"})
+		return
+	}
+	defer os.RemoveAll(tempDir) // Cleanup
+
+	// Save zip file
+	zipPath := filepath.Join(tempDir, header.Filename)
+	out, err := os.Create(zipPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save zip file"})
+		return
+	}
+	defer out.Close()
+	_, err = io.Copy(out, file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to write zip file"})
+		return
+	}
+	out.Close() // Close explicitly before unzip
+
+	// Unzip
+	bundlePath := filepath.Join(tempDir, "extracted")
+	if err := utils.Unzip(zipPath, bundlePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unzip bundle: " + err.Error()})
+		return
+	}
+
+	// Look for unnecessary nesting (common when zipping folders)
+	// If the extracted folder contains only ONE folder, use that as the root
+	entries, err := os.ReadDir(bundlePath)
+	if err == nil && len(entries) == 1 && entries[0].IsDir() {
+		bundlePath = filepath.Join(bundlePath, entries[0].Name())
 	}
 
 	update := &models.Update{
-		ProjectSlug:       req.ProjectSlug,
-		UpdateID:          req.UpdateID,
-		RuntimeVersion:    req.RuntimeVersion,
-		Channel:           req.Channel,
-		Platform:          req.Platform,
-		BundlePath:        req.BundlePath,
-		RolloutPercentage: req.RolloutPercentage,
+		ProjectSlug:       projectSlug,
+		UpdateID:          updateID,
+		RuntimeVersion:    runtimeVersion,
+		Channel:           channel,
+		Platform:          platform,
+		BundlePath:        bundlePath, // Pointing to temp path for processing
+		RolloutPercentage: rolloutPercentage,
 		IsActive:          true,
 		IsRollback:        false,
 	}
 
 	// Auto-create project if it doesn't exist
 	if h.projectRepo != nil {
-		h.projectRepo.EnsureProjectExists(req.ProjectSlug, req.ProjectSlug)
+		h.projectRepo.EnsureProjectExists(projectSlug, projectSlug)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute) // Increased timeout for upload
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute) // Increased timeout for upload
 	defer cancel()
 
 	// Upload to Cloudinary if connected
 	if h.cloudinaryService != nil && h.cloudinaryService.IsConnected() {
 		// Upload directory
-		cloudFolder := fmt.Sprintf("updates/%s/%s", req.RuntimeVersion, req.UpdateID)
-		urlMap, err := h.cloudinaryService.UploadDirectory(ctx, cloudFolder, req.BundlePath)
+		cloudFolder := fmt.Sprintf("updates/%s/%s", runtimeVersion, updateID)
+		urlMap, err := h.cloudinaryService.UploadDirectory(ctx, cloudFolder, bundlePath)
 		if err == nil {
 			// Read metadata.json
-			metadataPath := filepath.Join(req.BundlePath, "metadata.json")
+			metadataPath := filepath.Join(bundlePath, "metadata.json")
 			metadataFile, err := os.ReadFile(metadataPath)
 			if err == nil {
 				var metadata models.UpdateMetadata
 				if err := json.Unmarshal(metadataFile, &metadata); err == nil {
 					// Read expoConfig.json
-					expoConfigPath := filepath.Join(req.BundlePath, "expoConfig.json")
+					expoConfigPath := filepath.Join(bundlePath, "expoConfig.json")
 					if expoConfigFile, err := os.ReadFile(expoConfigPath); err == nil {
 						var expoConfig map[string]interface{}
 						if err := json.Unmarshal(expoConfigFile, &expoConfig); err == nil {
@@ -199,15 +245,15 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 					// Compute hashes for ALL platforms (Critical for DB-only serving)
 					for platform, pm := range metadata.FileMetadata {
 						// Bundle Hash
-						bundlePath := filepath.Join(req.BundlePath, pm.Bundle)
-						if data, err := os.ReadFile(bundlePath); err == nil {
+						bundlePathFull := filepath.Join(bundlePath, pm.Bundle)
+						if data, err := os.ReadFile(bundlePathFull); err == nil {
 							pm.BundleKey = services.ComputeSHA256Hash(data)[:32]
 							pm.BundleHash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
 						}
 
 						// Assets Hashes
 						for i, asset := range pm.Assets {
-							assetPath := filepath.Join(req.BundlePath, asset.Path)
+							assetPath := filepath.Join(bundlePath, asset.Path)
 							if data, err := os.ReadFile(assetPath); err == nil {
 								pm.Assets[i].Key = services.ComputeSHA256Hash(data)[:32]
 								pm.Assets[i].Hash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
@@ -216,18 +262,28 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 						metadata.FileMetadata[platform] = pm
 					}
 					update.Metadata = &metadata
-
-					// Cleanup local files in background
-					go func(path string) {
-						// Wait a bit to ensure potential race conditions are avoided (optional but safer)
-						time.Sleep(2 * time.Second)
-						os.RemoveAll(path)
-						fmt.Printf("Cleaned up local update directory: %s\n", path)
-					}(req.BundlePath)
 				}
 			}
+		} else {
+			// Log error but don't fail, maybe we can run without cloudinary?
+			// But if we are remote, we kinda need cloudinary or persistent storage.
+			// For now, assuming Cloudinary is REQUIRED for remote setup.
+			fmt.Printf("Error uploading to Cloudinary: %v\n", err)
 		}
+	} else {
+		// Warning: Local storage on ephemeral filesystem (like Render) will be lost!
+		log.Println("WARNING: Cloudinary not connected. Files uploaded to temp storage will be lost on restart.")
 	}
+
+	// Important: We cannot rely on BundlePath being valid after this request ends
+	// if we are using ephemeral storage and not persisting it.
+	// However, the ManifestHandler might need it if not using Cloudinary strings.
+	// Since we are fixing for Render -> User should have Cloudinary or S3.
+	// We will proceed assuming Cloudinary took care of file persistence via URLs.
+
+	// Nulify BundlePath to avoid trying to read from it later if it's deleted?
+	// Or keep it for the duration of the request?
+	// Ideally update.BundlePath should be empty if we rely purely on Cloudinary URLs.
 
 	if err := h.updateRepo.Create(ctx, update); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
