@@ -142,6 +142,7 @@ func (h *ManifestHandler) Handle(c *gin.Context) {
 
 	// 4. Prepare metadata
 	if update.Metadata == nil {
+		log.Printf("[Manifest] Error: Update %s metadata is nil", update.ID.Hex())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Update metadata missing"})
 		return
 	}
@@ -172,12 +173,14 @@ func (h *ManifestHandler) sendManifest(
 	// Get platform-specific metadata
 	fileMetadata, ok := metadata["fileMetadata"].(map[string]interface{})
 	if !ok {
+		log.Printf("[Manifest] Error: Invalid fileMetadata format for update %s", updateID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid metadata format"})
 		return
 	}
 
 	platformMetadata, ok := fileMetadata[platform].(map[string]interface{})
 	if !ok {
+		log.Printf("[Manifest] Error: No metadata for platform %s in update %s", platform, updateID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "No metadata for platform"})
 		return
 	}
@@ -209,6 +212,7 @@ func (h *ManifestHandler) sendManifest(
 
 	launchAsset, err := h.getAssetInfoFromMetadataOrFile(updateBundlePath, bundlePath, "bundle", bundleKey, bundleHash, bundleUrl, updateObjectID, "true", runtimeVersion, platform, true)
 	if err != nil {
+		log.Printf("[Manifest] Error getting launch asset info: %v. BundlePath: %s", err, updateBundlePath)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get launch asset"})
 		return
 	}
@@ -385,6 +389,7 @@ func (h *ManifestHandler) sendMultipartResponse(
 
 	part, err := writer.CreatePart(partHeader)
 	if err != nil {
+		log.Printf("[Manifest] Error creating multipart part: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create response"})
 		return
 	}
