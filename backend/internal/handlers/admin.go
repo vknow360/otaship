@@ -266,7 +266,17 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 
 				// Assets Hashes
 				for i, asset := range pm.Assets {
-					assetPath := filepath.Join(bundlePath, asset.Path)
+					// Sanitize path (Windows -> Linux compatibility)
+					// Verify that we treat it as a slash-separated path
+					cleanPath := filepath.ToSlash(asset.Path)
+					if cleanPath != asset.Path {
+						// Update the struct so we save clean path to DB
+						pm.Assets[i].Path = cleanPath
+					}
+
+					// Construct full path for reading file
+					assetPath := filepath.Join(bundlePath, cleanPath)
+
 					// Delta Logic: Check if file exists
 					if data, err := os.ReadFile(assetPath); err == nil {
 						// File exists (uploaded), compute hash
@@ -286,9 +296,13 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 								if key, ok := assetInfo["key"].(string); ok {
 									pm.Assets[i].Key = key
 								}
+								// Ensure we keep the hash
+								pm.Assets[i].Hash = existingHash
 							} else {
-								log.Printf("Warning: Asset %s missing from upload and DB", asset.Path)
+								log.Printf("[RegisterUpdate] Warning: Asset %s (hash=%s) not found in DB even though hash provided.", cleanPath, existingHash)
 							}
+						} else {
+							log.Printf("[RegisterUpdate] Warning: Asset %s missing from upload and NO hash provided in metadata. Struct: %+v", cleanPath, asset)
 						}
 					}
 				}

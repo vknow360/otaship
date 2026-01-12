@@ -11,7 +11,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 )
 
@@ -135,21 +134,7 @@ func ConvertSHA256ToUUID(hash string) string {
 }
 
 // Base64URLEncode encodes data using URL-safe base64 without padding.
+// Base64URLEncode encodes data using URL-safe base64 without padding.
 func Base64URLEncode(data []byte) string {
-	encoded := base64.StdEncoding.EncodeToString(data)
-	// Convert to URL-safe encoding
-	var result strings.Builder
-	for _, c := range encoded {
-		switch c {
-		case '+':
-			result.WriteString("-")
-		case '/':
-			result.WriteString("_")
-		case '=':
-			// Remove padding
-		default:
-			result.WriteString(string(c))
-		}
-	}
-	return result.String()
+	return base64.RawURLEncoding.EncodeToString(data)
 }
