@@ -175,6 +175,16 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 		return
 	}
 
+	// DEBUG: List all files in bundlePath
+	filepath.Walk(bundlePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, _ := filepath.Rel(bundlePath, path)
+		log.Printf("DEBUG FILE: %s", relPath)
+		return nil
+	})
+
 	// Look for unnecessary nesting (common when zipping folders, especially from CLI)
 	// 1. If entries contains only ONE folder, use that as root
 	entries, err := os.ReadDir(bundlePath)

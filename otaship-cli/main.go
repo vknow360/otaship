@@ -1073,7 +1073,7 @@ func zipDirectory(sourceDir, zipPath string) error {
 		}
 
 		if baseDir != "" {
-			header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, sourceDir))
+			header.Name = filepath.ToSlash(filepath.Join(baseDir, strings.TrimPrefix(path, sourceDir)))
 		}
 
 		if info.IsDir() {
