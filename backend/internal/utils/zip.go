@@ -18,8 +18,11 @@ func Unzip(src, dest string) error {
 	defer r.Close()
 
 	for _, f := range r.File {
+		// Sanitize filename to ensure forward slashes (fixes Windows-created zips on Linux)
+		name := strings.ReplaceAll(f.Name, "\\", "/")
+
 		// Store filename/path for returning and using later on
-		fpath := filepath.Join(dest, f.Name)
+		fpath := filepath.Join(dest, name)
 
 		// Check for ZipSlip. More Info: http://snyk.io/research/zip-slip-vulnerability
 		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
