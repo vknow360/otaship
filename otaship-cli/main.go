@@ -5,6 +5,8 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -1042,7 +1044,9 @@ func readAppConfig(projectPath string) (string, string, error) {
 }
 
 // zipDirectory zips the contents of the specified directory into a target file.
-func zipDirectory(sourceDir, zipPath string) error {
+// If includeFiles is non-nil, only files in the map are included.
+// Keys in includeFiles should be slash-separated relative paths (e.g. "dist/metadata.json").
+func zipDirectory(sourceDir, zipPath string, includeFiles map[string]bool) error {
 	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		return err
@@ -1062,9 +1066,20 @@ func zipDirectory(sourceDir, zipPath string) error {
 		baseDir = filepath.Base(sourceDir)
 	}
 
-	filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// Calculate relative path for filtering
+		relPath, _ := filepath.Rel(sourceDir, path)
+		relPath = filepath.ToSlash(relPath) // Standardize to forward slash
+
+		// Filter logic
+		if includeFiles != nil && !info.IsDir() {
+			if !includeFiles[relPath] {
+				return nil // Skip this file
+			}
 		}
 
 		header, err := zip.FileInfoHeader(info)
@@ -1073,7 +1088,12 @@ func zipDirectory(sourceDir, zipPath string) error {
 		}
 
 		if baseDir != "" {
-			header.Name = filepath.ToSlash(filepath.Join(baseDir, strings.TrimPrefix(path, sourceDir)))
+			parts := strings.Split(relPath, "/")
+			if relPath == "." {
+				parts = []string{}
+			}
+			joinParts := append([]string{baseDir}, parts...)
+			header.Name = filepath.ToSlash(filepath.Join(joinParts...))
 		}
 
 		if info.IsDir() {
@@ -1099,8 +1119,6 @@ func zipDirectory(sourceDir, zipPath string) error {
 		_, err = io.Copy(writer, file)
 		return err
 	})
-
-	return err
 }
 
 func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, channel, distPath string, rollout int) error {
@@ -1108,7 +1126,59 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 		return fmt.Errorf("dist directory not found at %s", distPath)
 	}
 
-	// 1. Create Zip Bundle
+	// 1. Calculate Hashes & Delta Check
+	fmt.Println("      Checking for reusable assets (Delta Upload)...")
+
+	// Map: hash -> relative_path
+	localAssets := make(map[string]string)
+	allHashes := []string{}
+
+	err := filepath.Walk(distPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+
+		relPath, _ := filepath.Rel(distPath, path)
+		relPath = filepath.ToSlash(relPath)
+
+		// Always include metadata files, don't hash them for check
+		if relPath == "metadata.json" || relPath == "expoConfig.json" {
+			return nil
+		}
+
+		hash, err := computeFileHash(path)
+		if err == nil {
+			localAssets[hash] = relPath
+			allHashes = append(allHashes, hash)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to scan assets: %v", err)
+	}
+
+	// Check against server
+	missingHashes, err := checkMissingAssets(serverURL, token, allHashes)
+	if err != nil {
+		fmt.Printf("      Warning: Delta check failed (%v), uploading full bundle.\n", err)
+		missingHashes = allHashes // Fallback to full upload
+	} else {
+		savedCount := len(allHashes) - len(missingHashes)
+		fmt.Printf("      Skipping %d assets already on server.\n", savedCount)
+	}
+
+	// Build whitelist
+	includeFiles := make(map[string]bool)
+	includeFiles["metadata.json"] = true
+	includeFiles["expoConfig.json"] = true
+
+	for _, hash := range missingHashes {
+		if path, ok := localAssets[hash]; ok {
+			includeFiles[path] = true
+		}
+	}
+
+	// 2. Create Zip Bundle
 	fmt.Println("      Compressing bundle...")
 	tmpFile, err := os.CreateTemp("", "otaship-bundle-*.zip")
 	if err != nil {
@@ -1117,11 +1187,11 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 	defer os.Remove(tmpFile.Name()) // Cleanup
 	tmpFile.Close()                 // Close so zipDirectory can open it
 
-	if err := zipDirectory(distPath, tmpFile.Name()); err != nil {
+	if err := zipDirectory(distPath, tmpFile.Name(), includeFiles); err != nil {
 		return fmt.Errorf("failed to zip bundle: %v", err)
 	}
 
-	// 2. Prepare Multipart Upload
+	// 3. Prepare Multipart Upload
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
@@ -1153,7 +1223,7 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 		return fmt.Errorf("failed to close multipart writer: %v", err)
 	}
 
-	// 3. Send Request
+	// 4. Send Request
 	url := fmt.Sprintf("%s/api/admin/updates", strings.TrimRight(serverURL, "/"))
 	req, err := http.NewRequest("POST", url, body)
 	if err != nil {
@@ -1178,6 +1248,68 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 	}
 
 	return nil
+}
+
+// computeFileHash calculates the Base64 URL encoded SHA256 hash of a file
+func computeFileHash(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	// Base64 URL encode (no padding)
+	return strings.TrimRight(base64URLEncode(hash.Sum(nil)), "="), nil
+}
+
+func base64URLEncode(input []byte) string {
+	return base64.URLEncoding.EncodeToString(input)
+}
+
+func checkMissingAssets(serverURL, token string, hashes []string) ([]string, error) {
+	if len(hashes) == 0 {
+		return []string{}, nil
+	}
+
+	url := fmt.Sprintf("%s/api/admin/assets/check", strings.TrimRight(serverURL, "/"))
+
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"hashes": hashes,
+	})
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Missing []string `json:"missing"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Missing, nil
 }
 
 func generateUUID() string {
