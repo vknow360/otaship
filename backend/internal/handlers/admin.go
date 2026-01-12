@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -175,16 +176,6 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 		return
 	}
 
-	// DEBUG: List all files in bundlePath
-	filepath.Walk(bundlePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, _ := filepath.Rel(bundlePath, path)
-		log.Printf("DEBUG FILE: %s", relPath)
-		return nil
-	})
-
 	// Look for unnecessary nesting (common when zipping folders, especially from CLI)
 	// 1. If entries contains only ONE folder, use that as root
 	entries, err := os.ReadDir(bundlePath)
@@ -255,7 +246,9 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 				// Assets Hashes
 				for i, asset := range pm.Assets {
 					// Sanitize path (Windows -> Linux compatibility)
-					cleanPath := filepath.ToSlash(asset.Path)
+					// NOTE: filepath.ToSlash doesn't work on Linux for Windows paths
+					// because Linux treats \ as a valid filename character
+					cleanPath := strings.ReplaceAll(asset.Path, "\\", "/")
 					if cleanPath != asset.Path {
 						pm.Assets[i].Path = cleanPath
 					}
