@@ -119,7 +119,6 @@ func main() {
 		// Updates (can filter by project query param)
 		admin.GET("/updates", adminHandler.ListUpdates)
 		admin.POST("/updates", adminHandler.RegisterUpdate)
-		admin.POST("/assets/check", adminHandler.CheckAssets)
 		admin.PATCH("/updates/:id", adminHandler.UpdateUpdate)
 		admin.DELETE("/updates/:id", adminHandler.DeleteUpdate)
 		admin.POST("/updates/:id/rollback", adminHandler.CreateRollback)

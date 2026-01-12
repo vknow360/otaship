@@ -5,8 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -1047,7 +1045,7 @@ func readAppConfig(projectPath string) (string, string, error) {
 // If includeFiles is non-nil, only files in the map are included.
 // Keys in includeFiles should be slash-separated relative paths (e.g. "dist/metadata.json").
 // overrides allows substituting a file content with another local file path.
-func zipDirectory(sourceDir, zipPath string, includeFiles map[string]bool, overrides map[string]string) error {
+func zipDirectory(sourceDir, zipPath string) error {
 	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		return err
@@ -1076,40 +1074,12 @@ func zipDirectory(sourceDir, zipPath string, includeFiles map[string]bool, overr
 		relPath, _ := filepath.Rel(sourceDir, path)
 		relPath = filepath.ToSlash(relPath) // Standardize to forward slash
 
-		// Filter logic
-		if includeFiles != nil && !info.IsDir() {
-			if !includeFiles[relPath] {
-				return nil // Skip this file
-			}
-		}
-
 		// Prepare header
 		var header *zip.FileHeader
 
-		// Check override
-		var overridePath string
-		if overrides != nil {
-			if op, ok := overrides[relPath]; ok {
-				overridePath = op
-			}
-		}
-
-		if overridePath != "" {
-			// Get info from override file
-			oInfo, err := os.Stat(overridePath)
-			if err != nil {
-				return err
-			}
-			header, err = zip.FileInfoHeader(oInfo)
-			if err != nil {
-				return err
-			}
-			header.Name = relPath // Keep original name
-		} else {
-			header, err = zip.FileInfoHeader(info)
-			if err != nil {
-				return err
-			}
+		header, err = zip.FileInfoHeader(info)
+		if err != nil {
+			return err
 		}
 
 		if baseDir != "" {
@@ -1137,11 +1107,7 @@ func zipDirectory(sourceDir, zipPath string, includeFiles map[string]bool, overr
 		}
 
 		var file *os.File
-		if overridePath != "" {
-			file, err = os.Open(overridePath)
-		} else {
-			file, err = os.Open(path)
-		}
+		file, err = os.Open(path)
 
 		if err != nil {
 			return err
@@ -1157,82 +1123,7 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 		return fmt.Errorf("dist directory not found at %s", distPath)
 	}
 
-	// 1. Calculate Hashes & Delta Check
-	fmt.Println("      Checking for reusable assets (Delta Upload)...")
-
-	// Map: hash -> relative_path
-	localAssets := make(map[string]string)
-	allHashes := []string{}
-
-	err := filepath.Walk(distPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-
-		relPath, _ := filepath.Rel(distPath, path)
-		relPath = filepath.ToSlash(relPath)
-
-		// Always include metadata files, don't hash them for check
-		if relPath == "metadata.json" || relPath == "expoConfig.json" {
-			return nil
-		}
-
-		hash, err := computeFileHash(path)
-		if err == nil {
-			localAssets[hash] = relPath
-			allHashes = append(allHashes, hash)
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to scan assets: %v", err)
-	}
-
-	// Check against server
-	missingHashes, err := checkMissingAssets(serverURL, token, allHashes)
-	if err != nil {
-		fmt.Printf("      Warning: Delta check failed (%v), uploading full bundle.\n", err)
-		missingHashes = allHashes // Fallback to full upload
-	} else {
-		savedCount := len(allHashes) - len(missingHashes)
-		fmt.Printf("      Skipping %d assets already on server.\n", savedCount)
-	}
-
-	// Inject hashes into metadata.json
-	// We need a map of relPath -> hash
-	pathToHash := make(map[string]string)
-	for hash, path := range localAssets {
-		pathToHash[path] = hash
-	}
-
-	tempMetadataPath, err := injectHashesIntoMetadata(distPath, pathToHash)
-	if err != nil {
-		fmt.Printf("      Warning: Failed to inject hashes into metadata (%v), backend might reject delta.\n", err)
-	} else {
-		defer os.Remove(tempMetadataPath)
-	}
-
-	// Build whitelist
-	includeFiles := make(map[string]bool)
-	// We handle metadata manually via zipDirectory modifications or special handling?
-	// The current zipDirectory takes includeFiles map.
-	// We need a way to say "use THIS file for metadata.json".
-	// The easiest way is to pass a map of overrides to zipDirectory.
-
-	// Let's modify zipDirectory to accept overrides.
-	// OR simpler: Move temp metadata to overwrite dist/metadata.json? No, destructive.
-	// Let's update zipDirectory signature.
-
-	includeFiles["metadata.json"] = true
-	includeFiles["expoConfig.json"] = true
-
-	for _, hash := range missingHashes {
-		if path, ok := localAssets[hash]; ok {
-			includeFiles[path] = true
-		}
-	}
-
-	// 2. Create Zip Bundle
+	// 1. Create Zip Bundle
 	fmt.Println("      Compressing bundle...")
 	tmpFile, err := os.CreateTemp("", "otaship-bundle-*.zip")
 	if err != nil {
@@ -1241,17 +1132,11 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 	defer os.Remove(tmpFile.Name()) // Cleanup
 	tmpFile.Close()                 // Close so zipDirectory can open it
 
-	// Construct overrides
-	overrides := make(map[string]string)
-	if tempMetadataPath != "" {
-		overrides["metadata.json"] = tempMetadataPath
-	}
-
-	if err := zipDirectory(distPath, tmpFile.Name(), includeFiles, overrides); err != nil {
+	if err := zipDirectory(distPath, tmpFile.Name()); err != nil {
 		return fmt.Errorf("failed to zip bundle: %v", err)
 	}
 
-	// 3. Prepare Multipart Upload
+	// 2. Prepare Multipart Upload
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
@@ -1283,9 +1168,18 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 		return fmt.Errorf("failed to close multipart writer: %v", err)
 	}
 
-	// 4. Send Request
+	// 3. Send Request
+	startTime := time.Now()
 	url := fmt.Sprintf("%s/api/admin/updates", strings.TrimRight(serverURL, "/"))
-	req, err := http.NewRequest("POST", url, body)
+
+	// Create progress reader
+	contentLength := int64(body.Len())
+	progressReader := &ProgressReader{
+		Reader: body,
+		Total:  contentLength,
+	}
+
+	req, err := http.NewRequest("POST", url, progressReader)
 	if err != nil {
 		return err
 	}
@@ -1294,7 +1188,7 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	client := &http.Client{Timeout: 10 * time.Minute} // Large timeout for upload
-	req.ContentLength = int64(body.Len())             // Set content length explicitly
+	req.ContentLength = contentLength                 // Set content length explicitly
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1302,74 +1196,15 @@ func publishUpdate(serverURL, token, projectSlug, updateID, runtimeVersion, chan
 	}
 	defer resp.Body.Close()
 
+	// Clear progress line
+	fmt.Printf("\r      Uploading... 100%% (%s / %s) - Done in %s\n", formatBytes(contentLength), formatBytes(contentLength), time.Since(startTime).Round(time.Second))
+
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("server returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil
-}
-
-// computeFileHash calculates the Base64 URL encoded SHA256 hash of a file
-func computeFileHash(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-
-	// Base64 URL encode (no padding)
-	return strings.TrimRight(base64URLEncode(hash.Sum(nil)), "="), nil
-}
-
-func base64URLEncode(input []byte) string {
-	return base64.URLEncoding.EncodeToString(input)
-}
-
-func checkMissingAssets(serverURL, token string, hashes []string) ([]string, error) {
-	if len(hashes) == 0 {
-		return []string{}, nil
-	}
-
-	url := fmt.Sprintf("%s/api/admin/assets/check", strings.TrimRight(serverURL, "/"))
-
-	reqBody, _ := json.Marshal(map[string]interface{}{
-		"hashes": hashes,
-	})
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-
-	var result struct {
-		Missing []string `json:"missing"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	return result.Missing, nil
 }
 
 func generateUUID() string {
@@ -1381,73 +1216,32 @@ func generateUUID() string {
 		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-func injectHashesIntoMetadata(distPath string, pathToHash map[string]string) (string, error) {
-	metadataPath := filepath.Join(distPath, "metadata.json")
-	data, err := os.ReadFile(metadataPath)
-	if err != nil {
-		return "", err
+// ProgressReader wraps an io.Reader to track read progress
+type ProgressReader struct {
+	io.Reader
+	Total   int64
+	Current int64
+}
+
+func (pr *ProgressReader) Read(p []byte) (int, error) {
+	n, err := pr.Reader.Read(p)
+	pr.Current += int64(n)
+
+	val := float64(pr.Current) / float64(pr.Total) * 100
+	fmt.Printf("\r      Uploading... %.1f%% (%s / %s)   ", val, formatBytes(pr.Current), formatBytes(pr.Total))
+
+	return n, err
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
 	}
-
-	var metadata map[string]interface{}
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		return "", err
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
 	}
-
-	fileMetadata, ok := metadata["fileMetadata"].(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("invalid metadata format detected")
-	}
-
-	// Platforms (android, ios)
-	for _, platformData := range fileMetadata {
-		pm, ok := platformData.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Bundle
-		if bundlePath, ok := pm["bundle"].(string); ok {
-			// path in metadata is usually relative like "_expo/..."
-			// normalized for lookup
-			normPath := filepath.ToSlash(bundlePath)
-			if hash, found := pathToHash[normPath]; found {
-				pm["bundleHash"] = hash
-			}
-		}
-
-		// Assets
-		if assets, ok := pm["assets"].([]interface{}); ok {
-			for _, a := range assets {
-				asset := a.(map[string]interface{})
-				if path, ok := asset["path"].(string); ok {
-					normPath := filepath.ToSlash(path)
-					if hash, found := pathToHash[normPath]; found {
-						asset["hash"] = hash
-						fmt.Printf("      [DEBUG] Injected hash for %s\n", normPath)
-					} else {
-						fmt.Printf("      [DEBUG] No hash found for %s (looked for %s)\n", path, normPath)
-					}
-				}
-			}
-		}
-	}
-
-	// Write to temp file
-	tmpFile, err := os.CreateTemp("", "metadata-with-hashes-*.json")
-	if err != nil {
-		return "", err
-	}
-	defer tmpFile.Close()
-
-	newData, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	if _, err := tmpFile.Write(newData); err != nil {
-		os.Remove(tmpFile.Name())
-		return "", err
-	}
-
-	return tmpFile.Name(), nil
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }

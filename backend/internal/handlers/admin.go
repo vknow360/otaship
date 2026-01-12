@@ -241,7 +241,7 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 			}
 			update.Metadata = &metadata
 
-			// Compute hashes (Initial pass locally)
+			// Compute hashes for all files
 			for platform, pm := range metadata.FileMetadata {
 				// Bundle Hash
 				bundlePathFull := filepath.Join(bundlePath, pm.Bundle)
@@ -249,61 +249,26 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 					pm.BundleKey = services.ComputeSHA256Hash(data)[:32]
 					pm.BundleHash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
 				} else {
-					// Delta Logic for Bundle
-					if pm.BundleHash != "" {
-						if assetInfo, _ := h.updateRepo.FindAssetByHash(ctx, pm.BundleHash); assetInfo != nil {
-							if url, ok := assetInfo["url"].(string); ok {
-								pm.BundleUrl = url
-							}
-							if key, ok := assetInfo["key"].(string); ok {
-								pm.BundleKey = key
-							}
-						} else {
-							log.Printf("Warning: Bundle %s missing from upload and DB", pm.Bundle)
-						}
-					}
+					log.Printf("Warning: Bundle %s not found in upload", pm.Bundle)
 				}
 
 				// Assets Hashes
 				for i, asset := range pm.Assets {
 					// Sanitize path (Windows -> Linux compatibility)
-					// Verify that we treat it as a slash-separated path
 					cleanPath := filepath.ToSlash(asset.Path)
 					if cleanPath != asset.Path {
-						// Update the struct so we save clean path to DB
 						pm.Assets[i].Path = cleanPath
 					}
 
 					// Construct full path for reading file
 					assetPath := filepath.Join(bundlePath, cleanPath)
 
-					// Delta Logic: Check if file exists
 					if data, err := os.ReadFile(assetPath); err == nil {
 						// File exists (uploaded), compute hash
 						pm.Assets[i].Key = services.ComputeSHA256Hash(data)[:32]
 						pm.Assets[i].Hash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
 					} else {
-						// File MISSING (Delta), check if we have it in DB
-						// We need the hash from the metadata (client sent it)
-						existingHash := asset.Hash
-						if existingHash != "" {
-							// Look it up
-							if assetInfo, _ := h.updateRepo.FindAssetByHash(ctx, existingHash); assetInfo != nil {
-								// Found it! Reuse URL and Key
-								if url, ok := assetInfo["url"].(string); ok {
-									pm.Assets[i].Url = url
-								}
-								if key, ok := assetInfo["key"].(string); ok {
-									pm.Assets[i].Key = key
-								}
-								// Ensure we keep the hash
-								pm.Assets[i].Hash = existingHash
-							} else {
-								log.Printf("[RegisterUpdate] Warning: Asset %s (hash=%s) not found in DB even though hash provided.", cleanPath, existingHash)
-							}
-						} else {
-							log.Printf("[RegisterUpdate] Warning: Asset %s missing from upload and NO hash provided in metadata. Struct: %+v", cleanPath, asset)
-						}
+						log.Printf("Warning: Asset %s not found in upload", cleanPath)
 					}
 				}
 				metadata.FileMetadata[platform] = pm
@@ -648,38 +613,4 @@ func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
-}
-
-// CheckAssets accepts a list of hashes and returns only those that are NOT found in the DB.
-// POST /api/admin/assets/check
-func (h *AdminHandler) CheckAssets(c *gin.Context) {
-	var req struct {
-		Hashes []string `json:"hashes" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if h.updateRepo == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Database not connected"})
-		return
-	}
-
-	missingHashes := []string{}
-	ctx := context.Background()
-
-	// Optimization: This N+1 query loop is okay for now (~50-100 assets),
-	// but should be optimized to a single $in query later.
-	for _, hash := range req.Hashes {
-		asset, err := h.updateRepo.FindAssetByHash(ctx, hash)
-		if err != nil || asset == nil {
-			missingHashes = append(missingHashes, hash)
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"missing": missingHashes,
-	})
 }
