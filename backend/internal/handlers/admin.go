@@ -175,11 +175,22 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 		return
 	}
 
-	// Look for unnecessary nesting (common when zipping folders)
-	// If the extracted folder contains only ONE folder, use that as the root
+	// Look for unnecessary nesting (common when zipping folders, especially from CLI)
+	// 1. If entries contains only ONE folder, use that as root
 	entries, err := os.ReadDir(bundlePath)
 	if err == nil && len(entries) == 1 && entries[0].IsDir() {
 		bundlePath = filepath.Join(bundlePath, entries[0].Name())
+	} else {
+		// 2. Fallback: If "dist" folder exists and "metadata.json" is NOT in root, try "dist"
+		if _, err := os.Stat(filepath.Join(bundlePath, "metadata.json")); os.IsNotExist(err) {
+			distPath := filepath.Join(bundlePath, "dist")
+			if info, err := os.Stat(distPath); err == nil && info.IsDir() {
+				// Check if metadata exists inside dist
+				if _, err := os.Stat(filepath.Join(distPath, "metadata.json")); err == nil {
+					bundlePath = distPath
+				}
+			}
+		}
 	}
 
 	update := &models.Update{
@@ -202,67 +213,75 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute) // Increased timeout for upload
 	defer cancel()
 
+	// ---------------------------------------------------------
+	// NEW LOGIC: Parse Metadata ALWAYS (before Cloudinary)
+	// ---------------------------------------------------------
+	metadataPath := filepath.Join(bundlePath, "metadata.json")
+	metadataFile, err := os.ReadFile(metadataPath)
+	if err == nil {
+		var metadata models.UpdateMetadata
+		if err := json.Unmarshal(metadataFile, &metadata); err == nil {
+			// Read expoConfig.json
+			expoConfigPath := filepath.Join(bundlePath, "expoConfig.json")
+			if expoConfigFile, err := os.ReadFile(expoConfigPath); err == nil {
+				var expoConfig map[string]interface{}
+				if err := json.Unmarshal(expoConfigFile, &expoConfig); err == nil {
+					metadata.ExpoConfig = expoConfig
+				}
+			}
+			update.Metadata = &metadata
+
+			// Compute hashes (Initial pass locally)
+			for platform, pm := range metadata.FileMetadata {
+				// Bundle Hash
+				bundlePathFull := filepath.Join(bundlePath, pm.Bundle)
+				if data, err := os.ReadFile(bundlePathFull); err == nil {
+					pm.BundleKey = services.ComputeSHA256Hash(data)[:32]
+					pm.BundleHash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
+				}
+
+				// Assets Hashes
+				for i, asset := range pm.Assets {
+					assetPath := filepath.Join(bundlePath, asset.Path)
+					if data, err := os.ReadFile(assetPath); err == nil {
+						pm.Assets[i].Key = services.ComputeSHA256Hash(data)[:32]
+						pm.Assets[i].Hash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
+					}
+				}
+				metadata.FileMetadata[platform] = pm
+			}
+			update.Metadata = &metadata
+		}
+	} else {
+		log.Printf("Warning: Failed to read metadata.json: %v", err)
+	}
+
 	// Upload to Cloudinary if connected
 	if h.cloudinaryService != nil && h.cloudinaryService.IsConnected() {
 		// Upload directory
 		cloudFolder := fmt.Sprintf("updates/%s/%s", runtimeVersion, updateID)
 		urlMap, err := h.cloudinaryService.UploadDirectory(ctx, cloudFolder, bundlePath)
 		if err == nil {
-			// Read metadata.json
-			metadataPath := filepath.Join(bundlePath, "metadata.json")
-			metadataFile, err := os.ReadFile(metadataPath)
-			if err == nil {
-				var metadata models.UpdateMetadata
-				if err := json.Unmarshal(metadataFile, &metadata); err == nil {
-					// Read expoConfig.json
-					expoConfigPath := filepath.Join(bundlePath, "expoConfig.json")
-					if expoConfigFile, err := os.ReadFile(expoConfigPath); err == nil {
-						var expoConfig map[string]interface{}
-						if err := json.Unmarshal(expoConfigFile, &expoConfig); err == nil {
-							metadata.ExpoConfig = expoConfig
-						}
-					}
-
-					// Inject Cloudinary URLs if available
-					if urlMap != nil {
-						for platform, pm := range metadata.FileMetadata {
-							// Update BundleUrl
-							if url, ok := urlMap[filepath.FromSlash(pm.Bundle)]; ok {
-								pm.BundleUrl = url
-							}
-
-							// Update Assets Urls
-							for i, asset := range pm.Assets {
-								if url, ok := urlMap[filepath.FromSlash(asset.Path)]; ok {
-									pm.Assets[i].Url = url
-								}
-							}
-							metadata.FileMetadata[platform] = pm
-						}
-					}
-					update.Metadata = &metadata
-
-					// Compute hashes for ALL platforms (Critical for DB-only serving)
+			if update.Metadata != nil {
+				metadata := *update.Metadata
+				// Inject Cloudinary URLs if available
+				if urlMap != nil {
 					for platform, pm := range metadata.FileMetadata {
-						// Bundle Hash
-						bundlePathFull := filepath.Join(bundlePath, pm.Bundle)
-						if data, err := os.ReadFile(bundlePathFull); err == nil {
-							pm.BundleKey = services.ComputeSHA256Hash(data)[:32]
-							pm.BundleHash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
+						// Update BundleUrl
+						if url, ok := urlMap[filepath.FromSlash(pm.Bundle)]; ok {
+							pm.BundleUrl = url
 						}
 
-						// Assets Hashes
+						// Update Assets Urls
 						for i, asset := range pm.Assets {
-							assetPath := filepath.Join(bundlePath, asset.Path)
-							if data, err := os.ReadFile(assetPath); err == nil {
-								pm.Assets[i].Key = services.ComputeSHA256Hash(data)[:32]
-								pm.Assets[i].Hash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
+							if url, ok := urlMap[filepath.FromSlash(asset.Path)]; ok {
+								pm.Assets[i].Url = url
 							}
 						}
 						metadata.FileMetadata[platform] = pm
 					}
-					update.Metadata = &metadata
 				}
+				update.Metadata = &metadata
 			}
 		} else {
 			// Log error but don't fail, maybe we can run without cloudinary?
