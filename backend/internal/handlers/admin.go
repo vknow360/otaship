@@ -248,6 +248,20 @@ func (h *AdminHandler) RegisterUpdate(c *gin.Context) {
 				if data, err := os.ReadFile(bundlePathFull); err == nil {
 					pm.BundleKey = services.ComputeSHA256Hash(data)[:32]
 					pm.BundleHash = services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
+				} else {
+					// Delta Logic for Bundle
+					if pm.BundleHash != "" {
+						if assetInfo, _ := h.updateRepo.FindAssetByHash(ctx, pm.BundleHash); assetInfo != nil {
+							if url, ok := assetInfo["url"].(string); ok {
+								pm.BundleUrl = url
+							}
+							if key, ok := assetInfo["key"].(string); ok {
+								pm.BundleKey = key
+							}
+						} else {
+							log.Printf("Warning: Bundle %s missing from upload and DB", pm.Bundle)
+						}
+					}
 				}
 
 				// Assets Hashes

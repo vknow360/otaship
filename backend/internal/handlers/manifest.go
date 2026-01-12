@@ -336,7 +336,12 @@ func (h *ManifestHandler) getAssetInfoFromMetadataOrFile(
 	fullPath := filepath.Join(updateBundlePath, assetPath)
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
-		return nil, err
+		// Delta Update Fallback: If file is missing but we have basic info (like path/ext),
+		// we can't compute hash/key, so we must error out.
+		// BUT, if this was a delta update, 'key' and 'hash' SHOULD have been populated from DB by RegisterUpdate.
+		// If we are here, it means 'key' or 'hash' is missing AND the file is missing from disk.
+		// This is a genuine error state.
+		return nil, fmt.Errorf("asset missing from disk and no metadata available: %s", assetPath)
 	}
 
 	computedHash := services.Base64URLEncode(services.ComputeSHA256HashBytes(data))
