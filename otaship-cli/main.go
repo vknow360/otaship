@@ -19,13 +19,14 @@ import (
 	"time"
 )
 
-const Version = "1.0.0"
+const Version = "1.1.0"
 
 // Config represents the otaship.json configuration file.
 type Config struct {
-	Server  string `json:"server"`
-	APIKey  string `json:"api"`
-	Channel string `json:"channel"`
+	Server    string   `json:"server"`
+	APIKey    string   `json:"api"`
+	Channel   string   `json:"channel"`
+	Platforms []string `json:"platforms"`
 }
 
 func main() {
@@ -146,9 +147,10 @@ func runInit() {
 	}
 
 	config := Config{
-		Server:  server,
-		APIKey:  apiKey,
-		Channel: channel,
+		Server:    server,
+		APIKey:    apiKey,
+		Channel:   channel,
+		Platforms: []string{"android", "ios"},
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -357,7 +359,7 @@ func runPublish() {
 	// Step 1: Export
 	if !*skipExport {
 		fmt.Println("[1/3] Exporting Expo bundle...")
-		if err := runExpoExport(*projectPath); err != nil {
+		if err := runExpoExport(*projectPath, *&config.Platforms); err != nil {
 			fmt.Printf("Error: Export failed: %v\n", err)
 			os.Exit(1)
 		}
@@ -1003,12 +1005,17 @@ func loadConfig(projectPath string) Config {
 	return config
 }
 
-func runExpoExport(projectPath string) error {
-	cmd := exec.Command("npx", "expo", "export")
-	cmd.Dir = projectPath
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+func runExpoExport(projectPath string, platforms []string) error {
+	for _, p := range platforms {
+		cmd := exec.Command("npx", "expo", "export", "-p", p)
+		cmd.Dir = projectPath
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func readAppConfig(projectPath string) (string, string, error) {
@@ -1018,27 +1025,56 @@ func readAppConfig(projectPath string) (string, string, error) {
 		return "", "", err
 	}
 
-	var config struct {
+	// First, parse the basic structure with runtimeVersion as json.RawMessage
+	// to handle both string and object formats
+	var rawConfig struct {
 		Expo struct {
-			Slug           string `json:"slug"`
-			RuntimeVersion string `json:"runtimeVersion"`
+			Slug           string          `json:"slug"`
+			Version        string          `json:"version"`
+			RuntimeVersion json.RawMessage `json:"runtimeVersion"`
 		} `json:"expo"`
 	}
 
-	if err := json.Unmarshal(data, &config); err != nil {
+	if err := json.Unmarshal(data, &rawConfig); err != nil {
 		return "", "", err
 	}
 
-	if config.Expo.Slug == "" {
+	if rawConfig.Expo.Slug == "" {
 		return "", "", fmt.Errorf("expo.slug is required in app.json")
 	}
 
-	runtimeVersion := config.Expo.RuntimeVersion
+	// Determine runtimeVersion
+	var runtimeVersion string
+
+	if len(rawConfig.Expo.RuntimeVersion) > 0 {
+		// Try to parse as string first
+		var strVersion string
+		if err := json.Unmarshal(rawConfig.Expo.RuntimeVersion, &strVersion); err == nil {
+			runtimeVersion = strVersion
+		} else {
+			// Try to parse as object with policy
+			var policyObj struct {
+				Policy string `json:"policy"`
+			}
+			if err := json.Unmarshal(rawConfig.Expo.RuntimeVersion, &policyObj); err == nil {
+				if policyObj.Policy == "appVersion" {
+					// Use the version field from app.json
+					runtimeVersion = rawConfig.Expo.Version
+					if runtimeVersion == "" {
+						return "", "", fmt.Errorf("expo.version is required when runtimeVersion policy is 'appVersion'")
+					}
+				} else if policyObj.Policy != "" {
+					return "", "", fmt.Errorf("unsupported runtimeVersion policy: %s", policyObj.Policy)
+				}
+			}
+		}
+	}
+
 	if runtimeVersion == "" {
 		runtimeVersion = "1"
 	}
 
-	return config.Expo.Slug, runtimeVersion, nil
+	return rawConfig.Expo.Slug, runtimeVersion, nil
 }
 
 // zipDirectory zips the contents of the specified directory into a target file.

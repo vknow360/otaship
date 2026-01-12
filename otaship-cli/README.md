@@ -134,6 +134,41 @@ Make sure `expo export` completed successfully. Check for errors in the export o
 
 Ensure your `app.json` has the `expo.slug` field set.
 
+## Runtime Version
+
+The CLI reads `runtimeVersion` from your `app.json`. Two formats are supported:
+
+### String Format
+
+```json
+{
+  "expo": {
+    "runtimeVersion": "1.0.0"
+  }
+}
+```
+
+### Policy Format
+
+When using a policy object, the CLI will resolve the runtime version based on the policy:
+
+```json
+{
+  "expo": {
+    "version": "1.1.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
+  }
+}
+```
+
+| Policy       | Description                                      |
+| ------------ | ------------------------------------------------ |
+| `appVersion` | Uses the `expo.version` field as runtime version |
+
+If no `runtimeVersion` is specified, it defaults to `"1"`.
+
 ## License
 
 MIT
