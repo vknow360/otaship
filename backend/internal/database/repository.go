@@ -262,3 +262,59 @@ func (r *UpdateRepository) DeleteByProjectSlug(ctx context.Context, projectSlug 
 
 	return nil
 }
+
+// FindAssetByHash searches for an asset with the given hash in any update.
+// Returns the asset metadata (including URL) if found.
+func (r *UpdateRepository) FindAssetByHash(ctx context.Context, hash string) (map[string]interface{}, error) {
+	if r == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	// We need to look in both android and ios metadata structures.
+	// Since the structure is deeply nested and might differ, using an $or query is safest.
+	// We project only the matching part to avoid fetching huge documents.
+
+	filter := bson.M{
+		"$or": []bson.M{
+			{"metadata.fileMetadata.android.assets.hash": hash},
+			{"metadata.fileMetadata.ios.assets.hash": hash},
+			{"metadata.fileMetadata.android.bundleHash": hash}, // Also check bundles
+			{"metadata.fileMetadata.ios.bundleHash": hash},
+		},
+	}
+
+	// We just need one match
+	var update models.Update
+	err := r.collection.FindOne(ctx, filter).Decode(&update)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil // Not found
+		}
+		return nil, err
+	}
+
+	// Manual scan to find the exact asset and return its data
+	// This is CPU bound but better than complex aggregation pipelines for now.
+	if update.Metadata == nil {
+		return nil, nil
+	}
+
+	for _, pm := range update.Metadata.FileMetadata {
+		if pm.BundleHash == hash {
+			return map[string]interface{}{
+				"url": pm.BundleUrl,
+				"key": pm.BundleKey,
+			}, nil
+		}
+		for _, asset := range pm.Assets {
+			if asset.Hash == hash {
+				return map[string]interface{}{
+					"url": asset.Url,
+					"key": asset.Key,
+				}, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
