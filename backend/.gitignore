@@ -1,0 +1,11 @@
+# Environment (secrets)
+.env
+
+# Temp upload directory
+uploads/
+
+# HTTP test files
+req.http
+
+# Compiled binary
+*.exe

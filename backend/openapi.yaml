@@ -1,0 +1,490 @@
+openapi: 3.0.3
+info:
+  title: OTAship API
+  version: 2.0.0
+  description: OTAship backend API documentation including Admin and Project scopes.
+servers:
+  - url: http://localhost:8080/api
+    description: Local development server
+
+components:
+  securitySchemes:
+    AdminBearer:
+      type: http
+      scheme: bearer
+      description: Enter the ADMIN_ACCESS_TOKEN here
+    ProjectApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Project API Key
+
+  schemas:
+    Project:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Update:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        runtime_version: { type: string }
+        channel: { type: string }
+        rollout_percentage: { type: integer }
+        platform: { type: string }
+        is_active: { type: boolean }
+        is_rollback: { type: boolean }
+        message: { type: string }
+        created_at: { type: string, format: date-time }
+
+    ApiKey:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        key_prefix: { type: string }
+        created_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time, nullable: true }
+
+    Asset:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        update_id: { type: string, format: uuid }
+        platform: { type: string }
+        file_name: { type: string }
+        mime_type: { type: string }
+        key: { type: string }
+        url: { type: string }
+        file_hash: { type: string }
+        hash: { type: string }
+
+paths:
+  /admin/verify:
+    get:
+      summary: Verify Admin Token
+      tags: [Admin]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK
+
+  /admin/projects:
+    get:
+      summary: List all projects
+      tags: [Admin - Projects]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create a new project
+      tags: [Admin - Projects]
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                slug: { type: string }
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '201':
+          description: Created
+
+  /admin/projects/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get project by ID
+      tags: [Admin - Projects]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK
+    patch:
+      summary: Update project details
+      tags: [Admin - Projects]
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: Delete a project
+      tags: [Admin - Projects]
+      security:
+        - AdminBearer: []
+      responses:
+        '204':
+          description: Deleted
+
+  /admin/projects/{id}/keys:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: List API keys for a project
+      tags: [Admin - API Keys]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create a new API key for a project
+      tags: [Admin - API Keys]
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+      responses:
+        '201':
+          description: Created
+
+  /admin/projects/{project_id}/keys/{key_id}:
+    delete:
+      summary: Delete an API key
+      tags: [Admin - API Keys]
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: key_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Deleted
+
+  /admin/updates:
+    get:
+      summary: List all updates
+      tags: [Admin - Updates]
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: query
+          name: project_id
+          schema: { type: string, format: uuid }
+          description: Optional project filter
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0 }
+      responses:
+        '200':
+          description: OK
+
+  /admin/updates/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      summary: Delete an update
+      tags: [Admin - Updates]
+      security:
+        - AdminBearer: []
+      responses:
+        '204':
+          description: Deleted
+
+  /admin/updates/{id}/rollout:
+    patch:
+      summary: Update rollout percentage
+      tags: [Admin - Updates]
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rollout_percentage: { type: integer }
+      responses:
+        '204':
+          description: Updated
+
+  /admin/updates/{id}/assets:
+    get:
+      summary: List assets for an update
+      tags: [Admin - Updates]
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+
+  /admin/stats:
+    get:
+      summary: Get global statistics
+      tags: [Admin - Stats]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK
+
+  /admin/projects/{id}/stats:
+    get:
+      summary: Get project-specific statistics
+      tags: [Admin - Stats]
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+
+  /project/me:
+    get:
+      summary: Get project info using API key
+      tags: [Project]
+      security:
+        - ProjectApiKey: []
+      responses:
+        '200':
+          description: OK
+
+  /project/updates:
+    get:
+      summary: List updates for project
+      tags: [Project]
+      security:
+        - ProjectApiKey: []
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create a new update
+      tags: [Project]
+      security:
+        - ProjectApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id: { type: string, format: uuid }
+                runtime_version: { type: string }
+                channel: { type: string }
+                rollout_percentage: { type: integer }
+                platform: { type: string }
+                message: { type: string }
+      responses:
+        '201':
+          description: Created
+
+  /project/updates/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      summary: Delete a project update
+      tags: [Project]
+      security:
+        - ProjectApiKey: []
+      responses:
+        '204':
+          description: Deleted
+
+  /project/{project_id}/updates/{update_id}/upload:
+    post:
+      summary: Upload an update bundle
+      tags: [Project]
+      security:
+        - ProjectApiKey: []
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: update_id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                platform: { type: string }
+                bundle: { type: string, format: binary }
+      responses:
+        '200':
+          description: OK
+
+  /project/updates/{update_id}/rollback:
+    post:
+      summary: Create a rollback update
+      tags: [Project]
+      security:
+        - ProjectApiKey: []
+      parameters:
+        - in: path
+          name: update_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
+
+  /manifest/{project_id}:
+    get:
+      summary: Check for updates (Expo Client)
+      tags: [Public]
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+
+  /validate-key:
+    get:
+      summary: Validate an API key
+      tags: [Public]
+      security:
+        - ProjectApiKey: []
+      responses:
+        '200':
+          description: OK
+
+  /health:
+    get:
+      summary: Server health check
+      tags: [Public]
+      responses:
+        '200':
+          description: OK
+
+  /admin/settings:
+    get:
+      summary: Get all settings and available providers
+      tags: [Admin - Settings]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active_storage_provider: { type: string }
+                  providers:
+                    type: array
+                    items: { type: string }
+    put:
+      summary: Update a setting
+      tags: [Admin - Settings]
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key: { type: string }
+                value: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /admin/settings/storage/usage:
+    get:
+      summary: Get storage usage for all providers
+      tags: [Admin - Settings]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /admin/settings/{key}:
+    parameters:
+      - in: path
+        name: key
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get a specific setting
+      tags: [Admin - Settings]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK

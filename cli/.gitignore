@@ -1,0 +1,6 @@
+# Compiled binaries
+*.exe
+otaship
+
+# OS
+.DS_Store

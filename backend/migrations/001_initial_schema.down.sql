@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS download_events;
+DROP TABLE IF EXISTS assets;
+DROP TABLE IF EXISTS updates;
+DROP TABLE IF EXISTS api_keys;
+DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS settings;

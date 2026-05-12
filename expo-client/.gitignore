@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-shared/
+dist/
+web-build/
+
+# Native builds
+android/
+ios/
+
+# OS
+.DS_Store
+
+# Keys & certs
+keys/
+certs/
+*.pem
+*.jks
+*.p8
+*.p12
+*.key
+*.keystore
+!debug.keystore
+*.mobileprovision
+
+# Project-specific config
+otaship.json
+
+# Logs
+npm-debug.*
+yarn-error.log
+
+# Bundle artifacts
+*.jsbundle
+
+# Compiled binaries
+*.exe
