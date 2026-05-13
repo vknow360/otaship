@@ -45,7 +45,8 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 }
 
 const deleteAPIKey = `-- name: DeleteAPIKey :exec
-DELETE FROM api_keys WHERE id = $1 AND project_id = $2
+DELETE FROM api_keys 
+WHERE id = $1 AND project_id = $2
 `
 
 type DeleteAPIKeyParams struct {
@@ -59,7 +60,9 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) erro
 }
 
 const getAPIKeyBySuffix = `-- name: GetAPIKeyBySuffix :one
-SELECT id, project_id, key_hash FROM api_keys WHERE key_suffix = $1
+SELECT id, project_id, key_hash 
+FROM api_keys 
+WHERE key_suffix = $1
 `
 
 type GetAPIKeyBySuffixRow struct {
@@ -78,7 +81,8 @@ func (q *Queries) GetAPIKeyBySuffix(ctx context.Context, keySuffix string) (GetA
 const listAPIKeys = `-- name: ListAPIKeys :many
 SELECT id, name, key_suffix, created_at, last_used_at 
 FROM api_keys 
-WHERE project_id = $1 ORDER BY created_at DESC
+WHERE project_id = $1 
+ORDER BY created_at DESC
 `
 
 type ListAPIKeysRow struct {
@@ -116,7 +120,9 @@ func (q *Queries) ListAPIKeys(ctx context.Context, projectID pgtype.UUID) ([]Lis
 }
 
 const updateAPIKeyLastUsed = `-- name: UpdateAPIKeyLastUsed :exec
-UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = $1
+UPDATE api_keys 
+SET last_used_at = CURRENT_TIMESTAMP 
+WHERE id = $1
 `
 
 func (q *Queries) UpdateAPIKeyLastUsed(ctx context.Context, id pgtype.UUID) error {

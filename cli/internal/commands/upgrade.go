@@ -54,6 +54,13 @@ func runUpgrade(cmd *cobra.Command, args []string) error {
 
 	ui.Info.Printf("New version available: %s → %s\n", Version, latestVersion)
 
+	if ui.IsInteractive() {
+		confirm, err := ui.Confirm("Do you want to upgrade now?")
+		if err != nil || !confirm {
+			return nil
+		}
+	}
+
 	asset, err := findAsset(release)
 	if err != nil {
 		return err

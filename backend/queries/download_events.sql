@@ -62,3 +62,6 @@ SELECT channel, COUNT(*) AS count
 FROM download_events 
 GROUP BY channel 
 ORDER BY count DESC;
+
+-- name: PruneOldDownloadEvents :exec
+DELETE FROM download_events WHERE timestamp < $1;

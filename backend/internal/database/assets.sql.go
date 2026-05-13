@@ -23,7 +23,7 @@ INSERT INTO assets (
     hash,
     storage_provider
 )
-SELECT $2,
+SELECT $1,
     a.platform,
     a.file_name,
     a.mime_type,
@@ -33,16 +33,16 @@ SELECT $2,
     a.hash,
     a.storage_provider
 FROM assets a
-WHERE a.update_id = $1
+WHERE a.update_id = $2
 `
 
 type CloneAssetsParams struct {
-	UpdateID   pgtype.UUID `json:"update_id"`
-	UpdateID_2 pgtype.UUID `json:"update_id_2"`
+	TargetUpdateID pgtype.UUID `json:"target_update_id"`
+	SourceUpdateID pgtype.UUID `json:"source_update_id"`
 }
 
 func (q *Queries) CloneAssets(ctx context.Context, arg CloneAssetsParams) error {
-	_, err := q.db.Exec(ctx, cloneAssets, arg.UpdateID, arg.UpdateID_2)
+	_, err := q.db.Exec(ctx, cloneAssets, arg.TargetUpdateID, arg.SourceUpdateID)
 	return err
 }
 

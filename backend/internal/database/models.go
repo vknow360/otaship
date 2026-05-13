@@ -65,6 +65,6 @@ type Update struct {
 	IsActive          bool               `json:"is_active"`
 	IsRollback        bool               `json:"is_rollback"`
 	Message           pgtype.Text        `json:"message"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	ExpoConfig        []byte             `json:"expo_config"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }

@@ -43,9 +43,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg, _ = config.LoadGlobalConfig()
 	}
 
-	fmt.Print("API Key: ")
-	var apiKey string
-	fmt.Scanln(&apiKey)
+	apiKey, err := ui.AskSecret("API Key")
+	if err != nil {
+		return err
+	}
 	apiKey = strings.TrimSpace(apiKey)
 
 	if apiKey == "" {
@@ -66,9 +67,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	ui.Success.Println("Saved API key")
 
+	channel := "production"
+	if ui.IsInteractive() {
+		channel, _ = ui.AskOptional("Default Channel", "production")
+	}
+
 	projectCfg := &config.ProjectConfig{
 		ProjectID: project.ProjectID,
-		Channel:   "production",
+		Channel:   channel,
 	}
 	if err := config.SaveProjectConfig(projectCfg, projectRoot); err != nil {
 		return err

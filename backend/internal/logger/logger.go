@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -40,8 +41,20 @@ func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	return h.Handler.Handle(ctx, r)
 }
 
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
 		requestID := r.Header.Get("X-Request-ID")
 		if requestID == "" {
 			requestID = uuid.New().String()
@@ -50,13 +63,22 @@ func Middleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
 		w.Header().Set("X-Request-ID", requestID)
 
+		sw := &statusWriter{ResponseWriter: w, status: 200}
+
 		slog.InfoContext(ctx, "Request started",
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.String("remote_addr", r.RemoteAddr),
 		)
 
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(sw, r.WithContext(ctx))
+
+		slog.InfoContext(ctx, "Request completed",
+			slog.Int("status", sw.status),
+			slog.Duration("latency", time.Since(start)),
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+		)
 	})
 }
 

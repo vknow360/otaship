@@ -62,16 +62,28 @@ func UploadAsset(pool *pgxpool.Pool, queries *database.Queries, providers map[st
 			jsonError(w, "Project ID is required", http.StatusBadRequest)
 			return
 		}
-		updateId, _ := utils.ParseUUID(updateIdStr)
-		projectId, _ := utils.ParseUUID(projectIdStr)
+		updateId, err := utils.ParseUUID(updateIdStr)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "Invalid update ID", slog.String("update_id", updateIdStr), slog.Any("error", err))
+			jsonError(w, "Invalid update ID", http.StatusBadRequest)
+			return
+		}
+		projectId, err := utils.ParseUUID(projectIdStr)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "Invalid project ID", slog.String("project_id", projectIdStr), slog.Any("error", err))
+			jsonError(w, "Invalid project ID", http.StatusBadRequest)
+			return
+		}
 
 		if projectId != utils.GetProjectId(r.Context()) {
+			slog.WarnContext(r.Context(), "Project ID does not match the authenticated user", slog.String("project_id", projectIdStr))
 			jsonError(w, "Project ID does not match the authenticated user", http.StatusForbidden)
 			return
 		}
 
 		project, err := queries.GetProjectByID(r.Context(), projectId)
 		if err != nil {
+			slog.ErrorContext(r.Context(), "Project not found", slog.String("project_id", projectIdStr))
 			jsonError(w, "Project not found", http.StatusNotFound)
 			return
 		}

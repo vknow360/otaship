@@ -151,11 +151,9 @@ func CheckForUpdates(queries *database.Queries) http.HandlerFunc {
 			slog.String("channel", channel),
 		)
 
-		// Check manifest cache first
 		cacheKey := manifestCacheKey(id, platform, runtimeVersion, channel)
 		if cached, ok := getCachedManifest(cacheKey); ok {
 			if cached.data == nil {
-				// Cached "no update available"
 				handleNoUpdateAvailable(w, r, protocolVersion)
 				return
 			}
@@ -199,7 +197,6 @@ func CheckForUpdates(queries *database.Queries) http.HandlerFunc {
 			return
 		}
 
-		// Rollback directive
 		if update.IsRollback {
 			embeddedUpdateID := r.Header.Get("expo-embedded-update-id")
 			if currentUpdateID == embeddedUpdateID {
@@ -218,7 +215,6 @@ func CheckForUpdates(queries *database.Queries) http.HandlerFunc {
 			return
 		}
 
-		// Rollout percentage check
 		if update.RolloutPercentage < 100 {
 			deviceHash := utils.BuildDeviceHash(r, platform)
 			if !shouldReceiveUpdate(int(update.RolloutPercentage), deviceHash) {
@@ -271,18 +267,24 @@ func CheckForUpdates(queries *database.Queries) http.HandlerFunc {
 			"id":             update.ID.String(),
 			"createdAt":      update.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
 			"runtimeVersion": update.RuntimeVersion,
-			"launchAsset": map[string]interface{}{
-				"hash":        launchAsset.Hash,
-				"key":         launchAsset.Key,
-				"contentType": launchAsset.MimeType,
-				"url":         launchAsset.Url,
-			},
-			"assets":   buildAssetsArray(regularAssets),
-			"metadata": map[string]interface{}{},
+			"assets":         buildAssetsArray(regularAssets),
+			"metadata":       map[string]interface{}{},
 			"extra": map[string]interface{}{
 				"expoClient": expoClient,
 			},
 		}
+
+		launchEntry := map[string]interface{}{
+			"hash":        launchAsset.Hash,
+			"key":         launchAsset.Key,
+			"contentType": launchAsset.MimeType,
+			"url":         launchAsset.Url,
+		}
+		if ext := filepath.Ext(launchAsset.FileName); ext != "" {
+			launchEntry["fileExtension"] = ext
+		}
+		manifest["launchAsset"] = launchEntry
+
 		manifestJSON, err := json.Marshal(manifest)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "Failed to marshal manifest", slog.Any("error", err))
@@ -335,7 +337,9 @@ func logDownloadEvent(
 		Platform:   platform,
 		Channel:    channel,
 	}
-	_, err := queries.CreateDownloadEvent(context.Background(), event)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := queries.CreateDownloadEvent(ctx, event)
 	if err != nil {
 		slog.Error("Failed to log download event", slog.Any("error", err))
 		return

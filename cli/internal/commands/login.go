@@ -25,29 +25,15 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 	if cfg.Server != "" {
 		ui.Info.Printf("Current server: %s\n", cfg.Server)
-		fmt.Print("Change server? (y/n/URL): ")
-		var response string
-		_, err := fmt.Scanln(&response)
-		if err != nil {
-			return fmt.Errorf("failed to read input: %w", err)
-		}
-		if response == "n" {
-			return nil
-		}
-		if response != "y" && (strings.HasPrefix(response, "http://") || strings.HasPrefix(response, "https://")) {
-			// User entered the URL directly
-			return setServer(cfg, response)
-		}
-		if response != "y" {
+		change, err := ui.Confirm("Change server?")
+		if err != nil || !change {
 			return nil
 		}
 	}
 
-	fmt.Print("Enter server URL: ")
-	var server string
-	_, err = fmt.Scanln(&server)
+	server, err := ui.Ask("Enter server URL")
 	if err != nil {
-		return fmt.Errorf("failed to read input: %w", err)
+		return err
 	}
 	return setServer(cfg, server)
 }

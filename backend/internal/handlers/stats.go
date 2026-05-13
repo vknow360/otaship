@@ -53,7 +53,7 @@ func GetProjectStats(queries *database.Queries) http.HandlerFunc {
 			var err error
 			recent, err = queries.GetRecentDownloadsByProject(ctx, database.GetRecentDownloadsByProjectParams{
 				ProjectID: projectId,
-				Timestamp: since(),
+				Since:     since(),
 			})
 			return err
 		})

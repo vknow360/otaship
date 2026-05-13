@@ -69,7 +69,7 @@ CREATE TABLE download_events (
 ALTER TABLE updates ADD CONSTRAINT updates_channel_check CHECK (channel ~ '^[a-z0-9][a-z0-9_-]{0,32}$');
 
 -- 8. Indexes for performance
-CREATE INDEX idx_updates_manifest ON updates(project_id, channel, runtime_version, is_active, created_at DESC);
+CREATE INDEX idx_updates_manifest ON updates(project_id, channel, platform, runtime_version, is_active, created_at DESC);
 CREATE INDEX idx_assets_update ON assets(update_id);
 CREATE INDEX idx_assets_file_hash ON assets(file_hash);
 CREATE INDEX idx_download_events_project ON download_events(project_id, timestamp DESC);

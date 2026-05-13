@@ -34,7 +34,7 @@ INSERT INTO updates (
     message
 ) 
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, created_at, expo_config
+RETURNING id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, expo_config, created_at
 `
 
 type CreateUpdateParams struct {
@@ -70,8 +70,8 @@ func (q *Queries) CreateUpdate(ctx context.Context, arg CreateUpdateParams) (Upd
 		&i.IsActive,
 		&i.IsRollback,
 		&i.Message,
-		&i.CreatedAt,
 		&i.ExpoConfig,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -113,7 +113,7 @@ func (q *Queries) DeleteUpdate(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getLatestActiveUpdate = `-- name: GetLatestActiveUpdate :one
-SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, created_at, expo_config FROM updates 
+SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, expo_config, created_at FROM updates 
 WHERE is_active = true 
 AND project_id = $1
 AND platform = $2
@@ -148,14 +148,14 @@ func (q *Queries) GetLatestActiveUpdate(ctx context.Context, arg GetLatestActive
 		&i.IsActive,
 		&i.IsRollback,
 		&i.Message,
-		&i.CreatedAt,
 		&i.ExpoConfig,
+		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUpdateByID = `-- name: GetUpdateByID :one
-SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, created_at, expo_config FROM updates WHERE id = $1
+SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, expo_config, created_at FROM updates WHERE id = $1
 `
 
 func (q *Queries) GetUpdateByID(ctx context.Context, id pgtype.UUID) (Update, error) {
@@ -171,8 +171,8 @@ func (q *Queries) GetUpdateByID(ctx context.Context, id pgtype.UUID) (Update, er
 		&i.IsActive,
 		&i.IsRollback,
 		&i.Message,
-		&i.CreatedAt,
 		&i.ExpoConfig,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -201,19 +201,20 @@ func (q *Queries) GetUpdatesCountByProject(ctx context.Context, projectID pgtype
 }
 
 const listUpdatesByProject = `-- name: ListUpdatesByProject :many
-SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, created_at, expo_config FROM updates 
+SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, expo_config, created_at FROM updates 
 WHERE project_id = $1
-ORDER BY created_at DESC LIMIT $2 OFFSET $3
+ORDER BY created_at DESC 
+LIMIT $3 OFFSET $2
 `
 
 type ListUpdatesByProjectParams struct {
 	ProjectID pgtype.UUID `json:"project_id"`
-	Limit     int32       `json:"limit"`
 	Offset    int32       `json:"offset"`
+	Limit     int32       `json:"limit"`
 }
 
 func (q *Queries) ListUpdatesByProject(ctx context.Context, arg ListUpdatesByProjectParams) ([]Update, error) {
-	rows, err := q.db.Query(ctx, listUpdatesByProject, arg.ProjectID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listUpdatesByProject, arg.ProjectID, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +232,8 @@ func (q *Queries) ListUpdatesByProject(ctx context.Context, arg ListUpdatesByPro
 			&i.IsActive,
 			&i.IsRollback,
 			&i.Message,
-			&i.CreatedAt,
 			&i.ExpoConfig,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -245,18 +246,18 @@ func (q *Queries) ListUpdatesByProject(ctx context.Context, arg ListUpdatesByPro
 }
 
 const listUpdatesPaginated = `-- name: ListUpdatesPaginated :many
-SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, created_at, expo_config FROM updates 
+SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, expo_config, created_at FROM updates 
 ORDER BY created_at DESC 
-LIMIT $1 OFFSET $2
+LIMIT $2 OFFSET $1
 `
 
 type ListUpdatesPaginatedParams struct {
-	Limit  int32 `json:"limit"`
 	Offset int32 `json:"offset"`
+	Limit  int32 `json:"limit"`
 }
 
 func (q *Queries) ListUpdatesPaginated(ctx context.Context, arg ListUpdatesPaginatedParams) ([]Update, error) {
-	rows, err := q.db.Query(ctx, listUpdatesPaginated, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listUpdatesPaginated, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -274,8 +275,8 @@ func (q *Queries) ListUpdatesPaginated(ctx context.Context, arg ListUpdatesPagin
 			&i.IsActive,
 			&i.IsRollback,
 			&i.Message,
-			&i.CreatedAt,
 			&i.ExpoConfig,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

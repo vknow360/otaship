@@ -52,7 +52,7 @@ func (q *Queries) CreateDownloadEvent(ctx context.Context, arg CreateDownloadEve
 }
 
 const getDownloadsByChannel = `-- name: GetDownloadsByChannel :many
-SELECT channel, COUNT(*) as count
+SELECT channel, COUNT(*) AS count
 FROM download_events
 WHERE project_id = $1
 GROUP BY channel
@@ -85,7 +85,7 @@ func (q *Queries) GetDownloadsByChannel(ctx context.Context, projectID pgtype.UU
 }
 
 const getDownloadsByPlatform = `-- name: GetDownloadsByPlatform :many
-SELECT platform, COUNT(*) as count
+SELECT platform, COUNT(*) AS count
 FROM download_events
 WHERE project_id = $1
 GROUP BY platform
@@ -120,8 +120,8 @@ func (q *Queries) GetDownloadsByPlatform(ctx context.Context, projectID pgtype.U
 const getDownloadsByUpdate = `-- name: GetDownloadsByUpdate :many
 SELECT 
     update_id,
-    COUNT(*) as download_count,
-    COUNT(DISTINCT device_hash) as unique_devices
+    COUNT(*) AS download_count,
+    COUNT(DISTINCT device_hash) AS unique_devices
 FROM download_events
 WHERE project_id = $1
 GROUP BY update_id
@@ -155,7 +155,10 @@ func (q *Queries) GetDownloadsByUpdate(ctx context.Context, projectID pgtype.UUI
 }
 
 const getGlobalDownloadsByChannel = `-- name: GetGlobalDownloadsByChannel :many
-SELECT channel, COUNT(*) as count FROM download_events GROUP BY channel ORDER BY count DESC
+SELECT channel, COUNT(*) AS count 
+FROM download_events 
+GROUP BY channel 
+ORDER BY count DESC
 `
 
 type GetGlobalDownloadsByChannelRow struct {
@@ -184,7 +187,10 @@ func (q *Queries) GetGlobalDownloadsByChannel(ctx context.Context) ([]GetGlobalD
 }
 
 const getGlobalDownloadsByPlatform = `-- name: GetGlobalDownloadsByPlatform :many
-SELECT platform, COUNT(*) as count FROM download_events GROUP BY platform ORDER BY count DESC
+SELECT platform, COUNT(*) AS count 
+FROM download_events 
+GROUP BY platform 
+ORDER BY count DESC
 `
 
 type GetGlobalDownloadsByPlatformRow struct {
@@ -213,7 +219,9 @@ func (q *Queries) GetGlobalDownloadsByPlatform(ctx context.Context) ([]GetGlobal
 }
 
 const getGlobalRecentDownloads = `-- name: GetGlobalRecentDownloads :one
-SELECT COUNT(*) as count FROM download_events WHERE timestamp > $1
+SELECT COUNT(*) AS count 
+FROM download_events 
+WHERE timestamp > $1
 `
 
 func (q *Queries) GetGlobalRecentDownloads(ctx context.Context, timestamp pgtype.Timestamptz) (int64, error) {
@@ -224,7 +232,7 @@ func (q *Queries) GetGlobalRecentDownloads(ctx context.Context, timestamp pgtype
 }
 
 const getGlobalTotalDownloads = `-- name: GetGlobalTotalDownloads :one
-SELECT COUNT(*) as count FROM download_events
+SELECT COUNT(*) AS count FROM download_events
 `
 
 func (q *Queries) GetGlobalTotalDownloads(ctx context.Context) (int64, error) {
@@ -235,7 +243,7 @@ func (q *Queries) GetGlobalTotalDownloads(ctx context.Context) (int64, error) {
 }
 
 const getRecentDownloadsByProject = `-- name: GetRecentDownloadsByProject :one
-SELECT COUNT(*) as count
+SELECT COUNT(*) AS count
 FROM download_events
 WHERE project_id = $1
   AND timestamp > $2
@@ -243,18 +251,18 @@ WHERE project_id = $1
 
 type GetRecentDownloadsByProjectParams struct {
 	ProjectID pgtype.UUID        `json:"project_id"`
-	Timestamp pgtype.Timestamptz `json:"timestamp"`
+	Since     pgtype.Timestamptz `json:"since"`
 }
 
 func (q *Queries) GetRecentDownloadsByProject(ctx context.Context, arg GetRecentDownloadsByProjectParams) (int64, error) {
-	row := q.db.QueryRow(ctx, getRecentDownloadsByProject, arg.ProjectID, arg.Timestamp)
+	row := q.db.QueryRow(ctx, getRecentDownloadsByProject, arg.ProjectID, arg.Since)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
 const getTotalDownloadsByProject = `-- name: GetTotalDownloadsByProject :one
-SELECT COUNT(*) as count
+SELECT COUNT(*) AS count
 FROM download_events
 WHERE project_id = $1
 `
@@ -264,4 +272,13 @@ func (q *Queries) GetTotalDownloadsByProject(ctx context.Context, projectID pgty
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const pruneOldDownloadEvents = `-- name: PruneOldDownloadEvents :exec
+DELETE FROM download_events WHERE timestamp < $1
+`
+
+func (q *Queries) PruneOldDownloadEvents(ctx context.Context, timestamp pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, pruneOldDownloadEvents, timestamp)
+	return err
 }

@@ -34,6 +34,15 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no API key found. Run 'otaship link'")
 	}
 
+	confirm, err := ui.Confirm("Are you sure you want to delete this update?")
+	if err != nil {
+		return err
+	}
+
+	if !confirm {
+		return fmt.Errorf("update deletion cancelled")
+	}
+
 	spinner, _ := ui.StartSpinner(fmt.Sprintf("Deleting update %s...", updateID))
 
 	c := &client.Client{BaseURL: cfg.Server}

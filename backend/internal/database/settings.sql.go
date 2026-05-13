@@ -58,7 +58,7 @@ const updateSetting = `-- name: UpdateSetting :exec
 INSERT INTO settings (key, value)
 VALUES ($1, $2)
 ON CONFLICT (key) DO UPDATE
-SET value = EXCLUDED.value, updated_at = now()
+SET value = EXCLUDED.value, updated_at = NOW()
 `
 
 type UpdateSettingParams struct {

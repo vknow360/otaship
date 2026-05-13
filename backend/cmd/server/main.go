@@ -17,6 +17,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/vknow360/otaship/backend/internal/database"
@@ -43,9 +45,14 @@ func main() {
 
 	ctx := context.Background()
 
-	db, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	dbURL := os.Getenv("DATABASE_URL")
+	db, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		panic("Failed to connect to database: " + err.Error())
+	}
+	if err = runMigrations(dbURL); err != nil {
+		slog.Error("Migration failed:", slog.Any("error", err))
+		os.Exit(1)
 	}
 	defer db.Close()
 	queries := database.New(db)
@@ -112,13 +119,13 @@ func main() {
 		</head>
 		<body>
 		<div id="swagger-ui"></div>
-		<script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js"></script>
+		<script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js" crossorigin></script>
 		<script>
 			window.onload = () => {
-			window.ui = SwaggerUIBundle({
-				url: '/api/openapi.yaml',
-				dom_id: '#swagger-ui',
-			});
+				window.ui = SwaggerUIBundle({
+					url: '/api/openapi.yaml',
+					dom_id: '#swagger-ui',
+				});
 			};
 		</script>
 		</body>
@@ -131,35 +138,35 @@ func main() {
 	r.Mount("/api/project", projectRouter(db, queries, providers))
 	r.Mount("/api/admin", adminRouter(db, queries, providers))
 
+	startPruningJob(queries)
+
+	// Start server
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	srv := &http.Server{
-		Addr:         ":" + port,
-		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 120 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:    ":" + port,
+		Handler: r,
 	}
 
 	go func() {
-		slog.Info("Server listening", slog.String("port", port))
+		slog.Info("Server starting", slog.String("port", port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Server failed", slog.Any("error", err))
 			os.Exit(1)
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
 
-	slog.Info("Shutting down...")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	slog.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	srv.Shutdown(shutdownCtx)
+	srv.Shutdown(ctx)
 }
 
 func apiRouter(queries *database.Queries) http.Handler {
@@ -187,7 +194,7 @@ func projectRouter(db *pgxpool.Pool, queries *database.Queries, providers map[st
 
 	r.Post("/updates", handlers.CreateUpdate(db, queries))
 	r.Get("/updates", handlers.ListProjectUpdates(queries))
-	r.Delete("/updates/{update_id}", handlers.DeleteProjectUpdate(queries))
+	r.Delete("/updates/{update_id}", handlers.DeleteProjectUpdate(queries, providers))
 	r.Post("/updates/{update_id}/rollback", handlers.CreateRollback(db, queries))
 	return r
 }
@@ -290,5 +297,47 @@ func ProjectKeyOnly(queries *database.Queries) func(next http.Handler) http.Hand
 			}()
 			next.ServeHTTP(w, r.WithContext(utils.SetProjectId(r.Context(), key.ProjectID)))
 		})
+	}
+}
+
+func runMigrations(dbURL string) error {
+	m, err := migrate.New(
+		"file://migrations",
+		dbURL,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	return nil
+}
+
+func startPruningJob(queries *database.Queries) {
+	ticker := time.NewTicker(24 * time.Hour)
+	go func() {
+		for {
+			// Run immediately on startup, then on every tick
+			prune(queries)
+			<-ticker.C
+		}
+	}()
+}
+
+func prune(queries *database.Queries) {
+	ctx := context.Background()
+	ninetyDaysAgo := time.Now().Add(-90 * 24 * time.Hour)
+
+	var pgTimestamp pgtype.Timestamptz
+	pgTimestamp.Time = ninetyDaysAgo
+	pgTimestamp.Valid = true
+
+	err := queries.PruneOldDownloadEvents(ctx, pgTimestamp)
+	if err != nil {
+		slog.Error("Failed to prune old download events", slog.Any("error", err))
+	} else {
+		slog.Info("Successfully pruned old download events", slog.Time("until", ninetyDaysAgo))
 	}
 }

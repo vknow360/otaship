@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/vknow360/otaship/cli/internal/utils"
 )
@@ -35,6 +36,7 @@ type CreateUpdateRequest struct {
 	RuntimeVersion    string `json:"runtime_version"`
 	Channel           string `json:"channel"`
 	Platform          string `json:"platform"`
+	Message           string `json:"message"`
 	RolloutPercentage int    `json:"rollout_percentage"`
 }
 
@@ -50,8 +52,10 @@ func (c *Client) ValidateAPIKey(apiKey string) (*ValidateKeyResponse, error) {
 		c.BaseURL+"/api/validate-key",
 		nil)
 	req.Header.Set("X-API-Key", apiKey)
-
-	resp, err := http.DefaultClient.Do(req)
+	client := http.Client{
+		Timeout: 30 * time.Second,
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -146,8 +150,8 @@ func (c *Client) UploadBundle(projectID, updateID, platform, apiKey, zipPath str
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("upload failed with status %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return utils.HandleHTTPError(resp)
 	}
 	return nil
 }

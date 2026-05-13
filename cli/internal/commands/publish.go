@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 	"github.com/vknow360/otaship/cli/internal/client"
 	"github.com/vknow360/otaship/cli/internal/config"
@@ -21,7 +22,9 @@ var (
 	rolloutFlag  int
 	skipExport   bool
 	platformFlag string
+	messageFlag  string
 	dryRunFlag   bool
+	yesFlag      bool
 )
 
 var PublishCommand = &cobra.Command{
@@ -42,7 +45,71 @@ func init() {
 	PublishCommand.Flags().IntVar(&rolloutFlag, "rollout", 100, "Rollout percentage (0-100)")
 	PublishCommand.Flags().BoolVar(&skipExport, "skip-export", false, "Skip expo export step")
 	PublishCommand.Flags().StringVar(&platformFlag, "platform", "all", "Platform: android, ios, or all")
+	PublishCommand.Flags().StringVar(&messageFlag, "message", "", "Description for the update")
 	PublishCommand.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Dry run (no actual update)")
+	PublishCommand.Flags().BoolVarP(&yesFlag, "yes", "y", false, "Skip confirmation prompt")
+}
+
+func resolvePlatform(cmd *cobra.Command) (string, error) {
+	if cmd.Flags().Changed("platform") {
+		return platformFlag, nil
+	}
+	if ui.IsInteractive() {
+		return ui.Select("Platform", []string{"all", "android", "ios"}, "all")
+	}
+	return "all", nil
+}
+
+func resolveChannel(cmd *cobra.Command, configChannel string) (string, error) {
+	if cmd.Flags().Changed("channel") {
+		return channelFlag, nil
+	}
+	if ui.IsInteractive() {
+		return ui.AskOptional("Channel", configChannel)
+	}
+	return configChannel, nil
+}
+
+func resolveMessage(cmd *cobra.Command) (string, error) {
+	if cmd.Flags().Changed("message") {
+		return messageFlag, nil
+	}
+	if ui.IsInteractive() {
+		return ui.AskOptional("Message (optional, press Enter to skip)", "")
+	}
+	return "", nil
+}
+
+func resolveRollout(cmd *cobra.Command) (int, error) {
+	if cmd.Flags().Changed("rollout") {
+		return rolloutFlag, nil
+	}
+	if ui.IsInteractive() {
+		input, err := ui.AskOptional("Rollout percentage", "100")
+		if err != nil {
+			return 100, err
+		}
+		var val int
+		fmt.Sscanf(input, "%d", &val)
+		if val < 0 || val > 100 {
+			return 100, fmt.Errorf("rollout percentage must be between 0 and 100")
+		}
+		return val, nil
+	}
+	return 100, nil
+}
+
+func showSummary(platform, channel, runtime, message string, rollout int, dryRun bool) (bool, error) {
+	msgDisplay := message
+	if msgDisplay == "" {
+		msgDisplay = "(none)"
+	}
+
+	pterm.DefaultBox.WithTitle("Publish Summary").Println(
+		fmt.Sprintf("Platform:  %s\nChannel:   %s\nRuntime:   %s\nMessage:   %s\nRollout:   %d%%\nDry run:   %v",
+			platform, channel, runtime, msgDisplay, rollout, dryRun))
+
+	return ui.Confirm("Proceed?")
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
@@ -51,16 +118,41 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not in an OTAship project. Run 'otaship init'")
 	}
 
-	if channelFlag != "" {
-		projectCfg.Channel = channelFlag
+	projectRoot, err := config.FindProjectRoot()
+	if err != nil {
+		return fmt.Errorf("not in an Expo project (no app.json found)")
 	}
 
-	if rolloutFlag < 0 || rolloutFlag > 100 {
-		return fmt.Errorf("rollout percentage must be between 0 and 100")
+	appJson, err := readAppJson(projectRoot)
+	if err != nil {
+		return err
 	}
 
-	if platformFlag != "android" && platformFlag != "ios" && platformFlag != "all" {
-		return fmt.Errorf("invalid platform. Expected android, ios, or all")
+	platform, err := resolvePlatform(cmd)
+	if err != nil {
+		return err
+	}
+
+	channel, err := resolveChannel(cmd, projectCfg.Channel)
+	if err != nil {
+		return err
+	}
+
+	updateMessage, err := resolveMessage(cmd)
+	if err != nil {
+		return err
+	}
+
+	rollout, err := resolveRollout(cmd)
+	if err != nil {
+		return err
+	}
+
+	if ui.IsInteractive() && !yesFlag {
+		confirmed, err := showSummary(platform, channel, appJson.Expo.RuntimeVersion, updateMessage, rollout, dryRunFlag)
+		if err != nil || !confirmed {
+			return fmt.Errorf("publish cancelled")
+		}
 	}
 
 	cfg, err := config.LoadGlobalConfig()
@@ -81,28 +173,15 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	ui.PrintBanner()
 	ui.Info.Printf("Publishing to: %s\n", project.Name)
-	ui.Info.Printf("Channel: %s\n", projectCfg.Channel)
+	ui.Info.Printf("Channel: %s\n", channel)
 
-	projectRoot, err := config.FindProjectRoot()
-	if err != nil {
-		return fmt.Errorf("not in an Expo project (no app.json found)")
-	}
-
-	if !skipExport {
-		defer os.RemoveAll(filepath.Join(projectRoot, "dist"))
-	}
-
-	appJson, err := readAppJson(projectRoot)
-	if err != nil {
-		return err
-	}
 	ui.Success.Printf("Project: %s\n", project.Name)
 	ui.Success.Printf("Runtime: %s\n", appJson.Expo.RuntimeVersion)
 
-	publish := func(platform string, updateReq *client.CreateUpdateRequest) error {
+	publish := func(p string, updateReq *client.CreateUpdateRequest) error {
 		if dryRunFlag {
 			ui.Info.Printf("[DRY RUN] Would create update for %s (Runtime: %s, Channel: %s)\n",
-				platform, updateReq.RuntimeVersion, updateReq.Channel)
+				p, updateReq.RuntimeVersion, updateReq.Channel)
 		} else {
 			update, err := c.CreateUpdate(apiKey, updateReq)
 			if err != nil {
@@ -112,35 +191,35 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			updateReq.ID = update.ID
 		}
 
-		spinner, _ := ui.StartSpinner(fmt.Sprintf("Packaging %s bundle...", platform))
-		bundleZip, err := zipDistFolder(projectRoot, platform)
+		spinner, _ := ui.StartSpinner(fmt.Sprintf("Packaging %s bundle...", p))
+		bundleZip, err := zipDistFolder(projectRoot, p)
 		if err != nil {
-			spinner.Fail(fmt.Sprintf("Failed to package %s bundle", platform))
+			spinner.Fail(fmt.Sprintf("Failed to package %s bundle", p))
 			return err
 		}
-		spinner.Success(fmt.Sprintf("Packaged %s bundle", platform))
+		spinner.Success(fmt.Sprintf("Packaged %s bundle", p))
 		defer os.Remove(bundleZip)
 
 		if dryRunFlag {
 			fi, _ := os.Stat(bundleZip)
-			ui.Info.Printf("[DRY RUN] Would upload %s bundle (Size: %s)\n", platform, formatSize(fi.Size()))
-			ui.Success.Printf("[DRY RUN] %s publish simulated successfully\n", platform)
+			ui.Info.Printf("[DRY RUN] Would upload %s bundle (Size: %s)\n", p, formatSize(fi.Size()))
+			ui.Success.Printf("[DRY RUN] %s publish simulated successfully\n", p)
 			ui.Info.Printf("Update ID: [DRY-RUN]\n")
 		} else {
-			spinner, _ = ui.StartSpinner(fmt.Sprintf("Uploading %s bundle...", platform))
-			if err := c.UploadBundle(projectCfg.ProjectID, updateReq.ID, platform, apiKey, bundleZip); err != nil {
-				spinner.Fail(fmt.Sprintf("%s upload failed", platform))
-				return fmt.Errorf("%s upload failed: %w", platform, err)
+			spinner, _ = ui.StartSpinner(fmt.Sprintf("Uploading %s bundle...", p))
+			if err := c.UploadBundle(projectCfg.ProjectID, updateReq.ID, p, apiKey, bundleZip); err != nil {
+				spinner.Fail(fmt.Sprintf("%s upload failed", p))
+				return fmt.Errorf("%s upload failed: %w", p, err)
 			}
-			spinner.Success(fmt.Sprintf("Uploaded %s bundle", platform))
+			spinner.Success(fmt.Sprintf("Uploaded %s bundle", p))
 			ui.Success.Println("Published successfully!")
 			ui.Info.Printf("Update ID: %s\n", updateReq.ID)
 		}
-		ui.Info.Printf("Channel: %s\n", projectCfg.Channel)
+		ui.Info.Printf("Channel: %s\n", channel)
 		return nil
 	}
 
-	if platformFlag == "all" || platformFlag == "android" {
+	if platform == "all" || platform == "android" {
 		if !skipExport {
 			spinner, _ := ui.StartSpinner("Running expo export for android...")
 			err = runExpoExport(projectRoot, "android")
@@ -155,17 +234,18 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 		err := publish("android", &client.CreateUpdateRequest{
 			ProjectID:         projectCfg.ProjectID,
-			RolloutPercentage: rolloutFlag,
-			Channel:           projectCfg.Channel,
+			RolloutPercentage: rollout,
+			Channel:           channel,
 			RuntimeVersion:    appJson.Expo.RuntimeVersion,
 			Platform:          "android",
+			Message:           updateMessage,
 		})
 
 		if err != nil {
 			return err
 		}
 	}
-	if platformFlag == "all" || platformFlag == "ios" {
+	if platform == "all" || platform == "ios" {
 		if !skipExport {
 			spinner, _ := ui.StartSpinner("Running expo export for ios...")
 			err = runExpoExport(projectRoot, "ios")
@@ -179,10 +259,11 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		}
 		err := publish("ios", &client.CreateUpdateRequest{
 			ProjectID:         projectCfg.ProjectID,
-			RolloutPercentage: rolloutFlag,
-			Channel:           projectCfg.Channel,
+			RolloutPercentage: rollout,
+			Channel:           channel,
 			RuntimeVersion:    appJson.Expo.RuntimeVersion,
 			Platform:          "ios",
+			Message:           updateMessage,
 		})
 
 		if err != nil {

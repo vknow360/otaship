@@ -54,6 +54,10 @@ func toUpdateResponse(u database.Update) UpdateResponse {
 	}
 }
 
+var channelNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,32}$`)
+var runtimeVersionRegex = regexp.MustCompile(`^\d+(\.\d+)*(-[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*)?$`)
+var platformRegex = regexp.MustCompile(`^(ios|android|all)$`)
+
 // Admin-scoped: list updates with optional project_id filter and pagination
 func ListUpdates(queries *database.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +214,7 @@ func DeleteUpdate(queries *database.Queries, providers map[string]storage.Provid
 }
 
 // Project-scoped: delete update owned by the authenticated project
-func DeleteProjectUpdate(queries *database.Queries) http.HandlerFunc {
+func DeleteProjectUpdate(queries *database.Queries, providers map[string]storage.Provider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "update_id")
 		if id == "" {
@@ -232,6 +236,26 @@ func DeleteProjectUpdate(queries *database.Queries) http.HandlerFunc {
 		if update.ProjectID != utils.GetProjectId(r.Context()) {
 			jsonError(w, "Update does not belong to this project", http.StatusForbidden)
 			return
+		}
+
+		updateAssets, _ := queries.GetAssetsByUpdateID(r.Context(), updateId)
+
+		for _, asset := range updateAssets {
+			count, err := queries.CountOtherAssetReferences(r.Context(), database.CountOtherAssetReferencesParams{
+				Key:      asset.Key,
+				UpdateID: updateId,
+			})
+
+			if err == nil && count == 0 {
+				targetProvider, exists := providers[asset.StorageProvider]
+				if !exists {
+					slog.WarnContext(r.Context(), "Storage provider not found", slog.String("key", asset.Key))
+					continue
+				}
+				go func(provider storage.Provider, k, mime string) {
+					_ = provider.Delete(context.Background(), k, mime)
+				}(targetProvider, asset.Key, asset.MimeType)
+			}
 		}
 
 		err = queries.DeleteUpdate(r.Context(), updateId)
@@ -269,15 +293,15 @@ func CreateUpdate(pool *pgxpool.Pool, queries *database.Queries) http.HandlerFun
 			return
 		}
 
-		if matched := regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,32}$`).Match([]byte(update.Channel)); !matched {
+		if matched := channelNameRegex.Match([]byte(update.Channel)); !matched {
 			jsonError(w, "Invalid channel name. Must start with a letter or number and contain only letters, numbers, hyphens, and underscores, with a maximum length of 32 characters.", http.StatusBadRequest)
 			return
 		}
-		if matched := regexp.MustCompile(`^\d+(\.\d+)*(-[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*)?$`).Match([]byte(update.RuntimeVersion)); !matched {
+		if matched := runtimeVersionRegex.Match([]byte(update.RuntimeVersion)); !matched {
 			jsonError(w, "Invalid runtime version. Must be a valid semver or simple number (e.g., 2, 1.0, 1.0.0-alpha.1).", http.StatusBadRequest)
 			return
 		}
-		if matched := regexp.MustCompile(`^(ios|android|all)$`).Match([]byte(update.Platform)); !matched {
+		if matched := platformRegex.Match([]byte(update.Platform)); !matched {
 			jsonError(w, "Invalid platform. Must be either ios or android or all.", http.StatusBadRequest)
 			return
 		}
@@ -434,8 +458,8 @@ func CreateRollback(pool *pgxpool.Pool, queries *database.Queries) http.HandlerF
 		}
 
 		err = qtx.CloneAssets(r.Context(), database.CloneAssetsParams{
-			UpdateID:   updateId,
-			UpdateID_2: rollback.ID,
+			SourceUpdateID: updateId,
+			TargetUpdateID: rollback.ID,
 		})
 		if err != nil {
 			jsonError(w, "Failed to clone assets", http.StatusInternalServerError)

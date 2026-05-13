@@ -51,9 +51,10 @@ func runLink(cmd *cobra.Command, args []string) error {
 	}
 
 	if apiKey == "" {
-		fmt.Print("API Key: ")
-		var inputKey string
-		fmt.Scanln(&inputKey)
+		inputKey, err := ui.AskSecret("API Key")
+		if err != nil {
+			return err
+		}
 		inputKey = strings.TrimSpace(inputKey)
 
 		if inputKey == "" {
