@@ -119,6 +119,7 @@ func (c *CloudinaryProvider) Upload(
 	key string,
 	data io.Reader,
 	contentType string,
+	size int64,
 ) (string, error) {
 
 	resourceType := "raw"

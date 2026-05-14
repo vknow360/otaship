@@ -1,8 +1,8 @@
 <script>
 	import { apiDelete } from '$lib/api';
-	import { invalidateAll } from '$app/navigation';
+	import { invalidateAll, goto } from '$app/navigation';
 
-	let { updateId, token } = $props();
+	let { updateId, token, redirect } = $props();
 	let isDeleting = $state(false);
 
 	async function handleDelete(e) {
@@ -17,7 +17,11 @@
 		isDeleting = true;
 		try {
 			await apiDelete(`api/admin/updates/${updateId}`, token);
-			await invalidateAll();
+			if (redirect) {
+				await goto(redirect);
+			} else {
+				await invalidateAll();
+			}
 		} catch (err) {
 			alert('Failed to delete release: ' + err.message);
 		} finally {

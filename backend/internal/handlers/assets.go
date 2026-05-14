@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -45,9 +44,9 @@ type UploadedAsset struct {
 	FileName    string
 	StorageKey  string
 	StorageURL  string
-	FileHash    string
 	Hash        string
 	ContentType string
+	Size        int64
 }
 
 func UploadAsset(pool *pgxpool.Pool, queries *database.Queries, providers map[string]storage.Provider) http.HandlerFunc {
@@ -200,10 +199,7 @@ func UploadAsset(pool *pgxpool.Pool, queries *database.Queries, providers map[st
 			return
 		}
 
-		err = qtx.DeleteAssetByUpdateIDandPlatform(r.Context(), database.DeleteAssetByUpdateIDandPlatformParams{
-			UpdateID: update.ID,
-			Platform: platform,
-		})
+		err = qtx.DeleteAssetByUpdateID(r.Context(), update.ID)
 		if err != nil {
 			slog.WarnContext(r.Context(), "Failed to delete old assets", slog.Any("error", err))
 		}
@@ -273,7 +269,7 @@ func UploadAsset(pool *pgxpool.Pool, queries *database.Queries, providers map[st
 			)
 		}
 
-		err = saveAssetRecords(r.Context(), qtx, uploadedAssets, platform, update, storage.Name())
+		err = saveAssetRecords(r.Context(), qtx, uploadedAssets, update, storage.Name())
 		if err != nil {
 			cleanupAssets()
 			slog.ErrorContext(r.Context(), "Failed to save asset records", slog.Any("error", err))
@@ -349,18 +345,17 @@ func ListUpdateAssets(queries *database.Queries) http.HandlerFunc {
 	}
 }
 
-func saveAssetRecords(ctx context.Context, queries *database.Queries, uploadedAssets []UploadedAsset, platform string, update database.Update, provider string) error {
+func saveAssetRecords(ctx context.Context, queries *database.Queries, uploadedAssets []UploadedAsset, update database.Update, provider string) error {
 	for _, asset := range uploadedAssets {
 		err := queries.CreateAsset(ctx, database.CreateAssetParams{
 			UpdateID:        update.ID,
-			Platform:        platform,
 			FileName:        asset.FileName,
 			MimeType:        asset.ContentType,
 			Key:             asset.StorageKey,
 			Url:             asset.StorageURL,
-			FileHash:        asset.FileHash,
 			Hash:            asset.Hash,
 			StorageProvider: provider,
+			Size:            asset.Size,
 		})
 
 		if err != nil {
@@ -420,6 +415,7 @@ func uploadZipAssets(ctx context.Context, storage storage.Provider, platformMeta
 		storageKey,
 		teeStream,
 		contentType,
+		int64(zipFile.UncompressedSize64),
 	)
 
 	if err != nil {
@@ -432,16 +428,15 @@ func uploadZipAssets(ctx context.Context, storage storage.Provider, platformMeta
 	}
 
 	hashBytes := hasher.Sum(nil)
-	fileHash := hex.EncodeToString(hashBytes)
 	hash := base64.RawURLEncoding.EncodeToString(hashBytes)
 
 	return UploadedAsset{
 		FileName:    normalizedZipName,
 		StorageKey:  storageKey,
 		StorageURL:  storageURL,
-		FileHash:    fileHash,
 		Hash:        hash,
 		ContentType: contentType,
+		Size:        int64(zipFile.UncompressedSize64),
 	}, nil
 }
 

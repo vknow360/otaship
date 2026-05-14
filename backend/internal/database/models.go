@@ -21,14 +21,13 @@ type ApiKey struct {
 type Asset struct {
 	ID              pgtype.UUID `json:"id"`
 	UpdateID        pgtype.UUID `json:"update_id"`
-	Platform        string      `json:"platform"`
 	FileName        string      `json:"file_name"`
 	MimeType        string      `json:"mime_type"`
 	Key             string      `json:"key"`
 	Url             string      `json:"url"`
-	FileHash        string      `json:"file_hash"`
 	Hash            string      `json:"hash"`
 	StorageProvider string      `json:"storage_provider"`
+	Size            int64       `json:"size"`
 }
 
 type DownloadEvent struct {
@@ -39,6 +38,16 @@ type DownloadEvent struct {
 	DeviceHash string             `json:"device_hash"`
 	Platform   string             `json:"platform"`
 	Channel    string             `json:"channel"`
+}
+
+type DownloadStat struct {
+	ID            int64       `json:"id"`
+	ProjectID     pgtype.UUID `json:"project_id"`
+	UpdateID      pgtype.UUID `json:"update_id"`
+	Platform      string      `json:"platform"`
+	Channel       string      `json:"channel"`
+	Date          pgtype.Date `json:"date"`
+	DownloadCount int32       `json:"download_count"`
 }
 
 type Project struct {

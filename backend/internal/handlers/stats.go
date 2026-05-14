@@ -34,11 +34,8 @@ func GetProjectStats(queries *database.Queries) http.HandlerFunc {
 		}
 
 		var (
-			total      int64
-			recent     int64
-			byPlatform []database.GetDownloadsByPlatformRow
-			byChannel  []database.GetDownloadsByChannelRow
-			byUpdate   []database.GetDownloadsByUpdateRow
+			total  []database.GetTotalDownloadsByProjectRow
+			recent []database.GetRecentDownloadsByProjectRow
 		)
 
 		g, ctx := errgroup.WithContext(r.Context())
@@ -51,28 +48,7 @@ func GetProjectStats(queries *database.Queries) http.HandlerFunc {
 
 		g.Go(func() error {
 			var err error
-			recent, err = queries.GetRecentDownloadsByProject(ctx, database.GetRecentDownloadsByProjectParams{
-				ProjectID: projectId,
-				Since:     since(),
-			})
-			return err
-		})
-
-		g.Go(func() error {
-			var err error
-			byPlatform, err = queries.GetDownloadsByPlatform(ctx, projectId)
-			return err
-		})
-
-		g.Go(func() error {
-			var err error
-			byChannel, err = queries.GetDownloadsByChannel(ctx, projectId)
-			return err
-		})
-
-		g.Go(func() error {
-			var err error
-			byUpdate, err = queries.GetDownloadsByUpdate(ctx, projectId)
+			recent, err = queries.GetRecentDownloadsByProject(ctx, projectId)
 			return err
 		})
 
@@ -81,13 +57,48 @@ func GetProjectStats(queries *database.Queries) http.HandlerFunc {
 			return
 		}
 
+		var totalDownloads int64
+		var recentDownloads int64
+		platforms := make(map[string]int64)
+		channels := make(map[string]int64)
+
+		for _, r := range recent {
+			recentDownloads += r.Count
+			totalDownloads += r.Count
+			platforms[r.Platform] += r.Count
+			channels[r.Channel] += r.Count
+		}
+
+		totalDownloads += recentDownloads
+
+		for _, r := range total {
+			totalDownloads += r.Count
+			platforms[r.Platform] += r.Count
+			channels[r.Channel] += r.Count
+		}
+
+		type statItem struct {
+			Platform string `json:"platform,omitempty"`
+			Channel  string `json:"channel,omitempty"`
+			Count    int64  `json:"count"`
+		}
+
+		byPlatform := make([]statItem, 0)
+		for p, c := range platforms {
+			byPlatform = append(byPlatform, statItem{Platform: p, Count: c})
+		}
+
+		byChannel := make([]statItem, 0)
+		for ch, c := range channels {
+			byChannel = append(byChannel, statItem{Channel: ch, Count: c})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"total_downloads":  total,
-			"recent_downloads": recent,
+			"total_downloads":  totalDownloads,
+			"recent_downloads": recentDownloads,
 			"by_platform":      byPlatform,
 			"by_channel":       byChannel,
-			"by_update":        byUpdate,
 		})
 	}
 }
@@ -95,35 +106,21 @@ func GetProjectStats(queries *database.Queries) http.HandlerFunc {
 func GetGlobalStats(queries *database.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var (
-			total      int64
-			recent     int64
-			byPlatform []database.GetGlobalDownloadsByPlatformRow
-			byChannel  []database.GetGlobalDownloadsByChannelRow
+			total  []database.GetTotalDownloadStatsRow
+			recent []database.GetGlobalRecentDownloadsRow
 		)
 
 		g, ctx := errgroup.WithContext(r.Context())
 
 		g.Go(func() error {
 			var err error
-			total, err = queries.GetGlobalTotalDownloads(ctx)
+			total, err = queries.GetTotalDownloadStats(ctx)
 			return err
 		})
 
 		g.Go(func() error {
 			var err error
-			recent, err = queries.GetGlobalRecentDownloads(ctx, since())
-			return err
-		})
-
-		g.Go(func() error {
-			var err error
-			byPlatform, err = queries.GetGlobalDownloadsByPlatform(ctx)
-			return err
-		})
-
-		g.Go(func() error {
-			var err error
-			byChannel, err = queries.GetGlobalDownloadsByChannel(ctx)
+			recent, err = queries.GetGlobalRecentDownloads(ctx)
 			return err
 		})
 
@@ -132,10 +129,44 @@ func GetGlobalStats(queries *database.Queries) http.HandlerFunc {
 			return
 		}
 
+		var totalDownloads int64
+		var recentDownloads int64
+		platforms := make(map[string]int64)
+		channels := make(map[string]int64)
+
+		for _, r := range recent {
+			recentDownloads += r.Count
+			totalDownloads += r.Count
+			platforms[r.Platform] += r.Count
+			channels[r.Channel] += r.Count
+		}
+
+		for _, r := range total {
+			totalDownloads += r.Count
+			platforms[r.Platform] += r.Count
+			channels[r.Channel] += r.Count
+		}
+
+		type statItem struct {
+			Platform string `json:"platform,omitempty"`
+			Channel  string `json:"channel,omitempty"`
+			Count    int64  `json:"count"`
+		}
+
+		byPlatform := make([]statItem, 0)
+		for p, c := range platforms {
+			byPlatform = append(byPlatform, statItem{Platform: p, Count: c})
+		}
+
+		byChannel := make([]statItem, 0)
+		for ch, c := range channels {
+			byChannel = append(byChannel, statItem{Channel: ch, Count: c})
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"total_downloads":  total,
-			"recent_downloads": recent,
+			"total_downloads":  totalDownloads,
+			"recent_downloads": recentDownloads,
 			"by_platform":      byPlatform,
 			"by_channel":       byChannel,
 		})

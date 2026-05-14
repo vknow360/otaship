@@ -1,6 +1,4 @@
 <script>
-	import RollbackButton from '$lib/RollbackButton.svelte';
-	import DeleteReleaseButton from '$lib/DeleteReleaseButton.svelte';
 	import { afterNavigate } from '$app/navigation';
 
 	let { data } = $props();
@@ -103,15 +101,19 @@
 								</div>
 
 								<div class="flex flex-col items-center">
-									<span class="font-mono font-bold text-white">{update.rollout_percentage}%</span>
-									<span class="text-[10px] text-neutral-600 uppercase">Rollout</span>
+									<span class="font-mono font-bold text-white">{update.download_count?.toLocaleString() || '0'}</span>
+									<span class="text-[10px] text-neutral-600 uppercase">Downloads</span>
 								</div>
 
 								<div class="flex items-center gap-2">
-									{#if !update.is_active}
-										<RollbackButton updateId={update.id} token={data.token} />
-									{/if}
-									<DeleteReleaseButton updateId={update.id} token={data.token} />
+									<a 
+										href={`/projects/${data.projectId}/releases/${update.id}`} 
+										class="ml-auto rounded p-2 text-neutral-500 hover:bg-neutral-800 hover:text-white transition-colors"
+									>
+										<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											<polyline points="9 18 15 12 9 6"></polyline>
+										</svg>
+									</a>
 								</div>
 							</div>
 						</div>

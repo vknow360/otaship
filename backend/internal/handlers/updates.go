@@ -37,9 +37,10 @@ type UpdateResponse struct {
 	IsRollback        bool   `json:"is_rollback"`
 	Message           string `json:"message"`
 	CreatedAt         int64  `json:"created_at"`
+	DownloadCount     int64  `json:"download_count"`
 }
 
-func toUpdateResponse(u database.Update) UpdateResponse {
+func toUpdateResponse(u database.Update, count int64) UpdateResponse {
 	return UpdateResponse{
 		ID:                u.ID.String(),
 		ProjectID:         u.ProjectID.String(),
@@ -51,6 +52,7 @@ func toUpdateResponse(u database.Update) UpdateResponse {
 		IsRollback:        u.IsRollback,
 		Message:           u.Message.String,
 		CreatedAt:         u.CreatedAt.Time.UnixMilli(),
+		DownloadCount:     count,
 	}
 }
 
@@ -120,7 +122,11 @@ func ListUpdates(queries *database.Queries) http.HandlerFunc {
 
 		resp := make([]UpdateResponse, len(updates))
 		for i, u := range updates {
-			resp[i] = toUpdateResponse(u)
+			count, err := queries.GetTotalDownloadsByUpdateID(r.Context(), u.ID)
+			if err != nil {
+				count = 0
+			}
+			resp[i] = toUpdateResponse(u, count)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -153,7 +159,11 @@ func ListProjectUpdates(queries *database.Queries) http.HandlerFunc {
 
 		resp := make([]UpdateResponse, len(updates))
 		for i, u := range updates {
-			resp[i] = toUpdateResponse(u)
+			count, err := queries.GetTotalDownloadsByUpdateID(r.Context(), u.ID)
+			if err != nil {
+				count = 0
+			}
+			resp[i] = toUpdateResponse(u, count)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -348,7 +358,7 @@ func CreateUpdate(pool *pgxpool.Pool, queries *database.Queries) http.HandlerFun
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(toUpdateResponse(createUpdate))
+		json.NewEncoder(w).Encode(toUpdateResponse(createUpdate, 0))
 	}
 }
 
@@ -476,6 +486,31 @@ func CreateRollback(pool *pgxpool.Pool, queries *database.Queries) http.HandlerF
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(toUpdateResponse(rollback))
+		json.NewEncoder(w).Encode(toUpdateResponse(rollback, 0))
+	}
+}
+
+func GetUpdate(queries *database.Queries) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "update_id")
+		updateId, err := utils.ParseUUID(id)
+		if err != nil {
+			jsonError(w, "Invalid update ID", http.StatusBadRequest)
+			return
+		}
+
+		update, err := queries.GetUpdateByID(r.Context(), updateId)
+		if err != nil {
+			jsonError(w, "Update not found", http.StatusNotFound)
+			return
+		}
+
+		count, err := queries.GetTotalDownloadsByUpdateID(r.Context(), update.ID)
+		if err != nil {
+			count = 0
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(toUpdateResponse(update, count))
 	}
 }

@@ -13,25 +13,10 @@ import (
 
 const cloneAssets = `-- name: CloneAssets :exec
 INSERT INTO assets (
-    update_id,
-    platform,
-    file_name,
-    mime_type,
-    key,
-    url,
-    file_hash,
-    hash,
-    storage_provider
+    update_id, file_name, mime_type, key, url, hash, storage_provider, size
 )
 SELECT $1,
-    a.platform,
-    a.file_name,
-    a.mime_type,
-    a.key,
-    a.url,
-    a.file_hash,
-    a.hash,
-    a.storage_provider
+    a.file_name, a.mime_type, a.key, a.url, a.hash, a.storage_provider, a.size
 FROM assets a
 WHERE a.update_id = $2
 `
@@ -65,41 +50,31 @@ func (q *Queries) CountOtherAssetReferences(ctx context.Context, arg CountOtherA
 
 const createAsset = `-- name: CreateAsset :exec
 INSERT INTO assets (
-    update_id,
-    platform,
-    file_name,
-    mime_type,
-    key,
-    url,
-    file_hash,
-    hash,
-    storage_provider
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    update_id, file_name, mime_type, key, url, hash, storage_provider, size
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type CreateAssetParams struct {
 	UpdateID        pgtype.UUID `json:"update_id"`
-	Platform        string      `json:"platform"`
 	FileName        string      `json:"file_name"`
 	MimeType        string      `json:"mime_type"`
 	Key             string      `json:"key"`
 	Url             string      `json:"url"`
-	FileHash        string      `json:"file_hash"`
 	Hash            string      `json:"hash"`
 	StorageProvider string      `json:"storage_provider"`
+	Size            int64       `json:"size"`
 }
 
 func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) error {
 	_, err := q.db.Exec(ctx, createAsset,
 		arg.UpdateID,
-		arg.Platform,
 		arg.FileName,
 		arg.MimeType,
 		arg.Key,
 		arg.Url,
-		arg.FileHash,
 		arg.Hash,
 		arg.StorageProvider,
+		arg.Size,
 	)
 	return err
 }
@@ -113,68 +88,10 @@ func (q *Queries) DeleteAssetByUpdateID(ctx context.Context, updateID pgtype.UUI
 	return err
 }
 
-const deleteAssetByUpdateIDandPlatform = `-- name: DeleteAssetByUpdateIDandPlatform :exec
-DELETE FROM assets WHERE update_id = $1 AND platform = $2
-`
-
-type DeleteAssetByUpdateIDandPlatformParams struct {
-	UpdateID pgtype.UUID `json:"update_id"`
-	Platform string      `json:"platform"`
-}
-
-func (q *Queries) DeleteAssetByUpdateIDandPlatform(ctx context.Context, arg DeleteAssetByUpdateIDandPlatformParams) error {
-	_, err := q.db.Exec(ctx, deleteAssetByUpdateIDandPlatform, arg.UpdateID, arg.Platform)
-	return err
-}
-
-const getAssetByFileHash = `-- name: GetAssetByFileHash :one
-SELECT id, update_id, platform, file_name, mime_type, key, url, file_hash, hash, storage_provider FROM assets WHERE file_hash = $1
-`
-
-func (q *Queries) GetAssetByFileHash(ctx context.Context, fileHash string) (Asset, error) {
-	row := q.db.QueryRow(ctx, getAssetByFileHash, fileHash)
-	var i Asset
-	err := row.Scan(
-		&i.ID,
-		&i.UpdateID,
-		&i.Platform,
-		&i.FileName,
-		&i.MimeType,
-		&i.Key,
-		&i.Url,
-		&i.FileHash,
-		&i.Hash,
-		&i.StorageProvider,
-	)
-	return i, err
-}
-
-const getAssetByID = `-- name: GetAssetByID :one
-SELECT id, update_id, platform, file_name, mime_type, key, url, file_hash, hash, storage_provider FROM assets WHERE id = $1
-`
-
-func (q *Queries) GetAssetByID(ctx context.Context, id pgtype.UUID) (Asset, error) {
-	row := q.db.QueryRow(ctx, getAssetByID, id)
-	var i Asset
-	err := row.Scan(
-		&i.ID,
-		&i.UpdateID,
-		&i.Platform,
-		&i.FileName,
-		&i.MimeType,
-		&i.Key,
-		&i.Url,
-		&i.FileHash,
-		&i.Hash,
-		&i.StorageProvider,
-	)
-	return i, err
-}
-
 const getAssetsByUpdateID = `-- name: GetAssetsByUpdateID :many
-SELECT id, update_id, platform, file_name, mime_type, key, url, file_hash, hash, storage_provider FROM assets 
+SELECT id, update_id, file_name, mime_type, key, url, hash, storage_provider, size FROM assets 
 WHERE update_id = $1
-ORDER BY platform, file_name
+ORDER BY file_name
 `
 
 func (q *Queries) GetAssetsByUpdateID(ctx context.Context, updateID pgtype.UUID) ([]Asset, error) {
@@ -189,14 +106,13 @@ func (q *Queries) GetAssetsByUpdateID(ctx context.Context, updateID pgtype.UUID)
 		if err := rows.Scan(
 			&i.ID,
 			&i.UpdateID,
-			&i.Platform,
 			&i.FileName,
 			&i.MimeType,
 			&i.Key,
 			&i.Url,
-			&i.FileHash,
 			&i.Hash,
 			&i.StorageProvider,
+			&i.Size,
 		); err != nil {
 			return nil, err
 		}

@@ -51,62 +51,29 @@ func (q *Queries) CreateDownloadEvent(ctx context.Context, arg CreateDownloadEve
 	return i, err
 }
 
-const getDownloadsByChannel = `-- name: GetDownloadsByChannel :many
-SELECT channel, COUNT(*) AS count
+const getGlobalRecentDownloads = `-- name: GetGlobalRecentDownloads :many
+SELECT platform, channel, COUNT(*) AS count
 FROM download_events
-WHERE project_id = $1
-GROUP BY channel
+GROUP BY platform, channel
 ORDER BY count DESC
 `
 
-type GetDownloadsByChannelRow struct {
-	Channel string `json:"channel"`
-	Count   int64  `json:"count"`
-}
-
-func (q *Queries) GetDownloadsByChannel(ctx context.Context, projectID pgtype.UUID) ([]GetDownloadsByChannelRow, error) {
-	rows, err := q.db.Query(ctx, getDownloadsByChannel, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetDownloadsByChannelRow
-	for rows.Next() {
-		var i GetDownloadsByChannelRow
-		if err := rows.Scan(&i.Channel, &i.Count); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getDownloadsByPlatform = `-- name: GetDownloadsByPlatform :many
-SELECT platform, COUNT(*) AS count
-FROM download_events
-WHERE project_id = $1
-GROUP BY platform
-ORDER BY count DESC
-`
-
-type GetDownloadsByPlatformRow struct {
+type GetGlobalRecentDownloadsRow struct {
 	Platform string `json:"platform"`
+	Channel  string `json:"channel"`
 	Count    int64  `json:"count"`
 }
 
-func (q *Queries) GetDownloadsByPlatform(ctx context.Context, projectID pgtype.UUID) ([]GetDownloadsByPlatformRow, error) {
-	rows, err := q.db.Query(ctx, getDownloadsByPlatform, projectID)
+func (q *Queries) GetGlobalRecentDownloads(ctx context.Context) ([]GetGlobalRecentDownloadsRow, error) {
+	rows, err := q.db.Query(ctx, getGlobalRecentDownloads)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetDownloadsByPlatformRow
+	var items []GetGlobalRecentDownloadsRow
 	for rows.Next() {
-		var i GetDownloadsByPlatformRow
-		if err := rows.Scan(&i.Platform, &i.Count); err != nil {
+		var i GetGlobalRecentDownloadsRow
+		if err := rows.Scan(&i.Platform, &i.Channel, &i.Count); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -117,65 +84,36 @@ func (q *Queries) GetDownloadsByPlatform(ctx context.Context, projectID pgtype.U
 	return items, nil
 }
 
-const getDownloadsByUpdate = `-- name: GetDownloadsByUpdate :many
-SELECT 
-    update_id,
-    COUNT(*) AS download_count,
-    COUNT(DISTINCT device_hash) AS unique_devices
+const getRecentDownloadsByProject = `-- name: GetRecentDownloadsByProject :many
+SELECT update_id, platform, channel, COUNT(*) AS count
 FROM download_events
 WHERE project_id = $1
-GROUP BY update_id
-ORDER BY MAX(timestamp) DESC
-`
-
-type GetDownloadsByUpdateRow struct {
-	UpdateID      pgtype.UUID `json:"update_id"`
-	DownloadCount int64       `json:"download_count"`
-	UniqueDevices int64       `json:"unique_devices"`
-}
-
-func (q *Queries) GetDownloadsByUpdate(ctx context.Context, projectID pgtype.UUID) ([]GetDownloadsByUpdateRow, error) {
-	rows, err := q.db.Query(ctx, getDownloadsByUpdate, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetDownloadsByUpdateRow
-	for rows.Next() {
-		var i GetDownloadsByUpdateRow
-		if err := rows.Scan(&i.UpdateID, &i.DownloadCount, &i.UniqueDevices); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getGlobalDownloadsByChannel = `-- name: GetGlobalDownloadsByChannel :many
-SELECT channel, COUNT(*) AS count 
-FROM download_events 
-GROUP BY channel 
+GROUP BY update_id, platform, channel
 ORDER BY count DESC
 `
 
-type GetGlobalDownloadsByChannelRow struct {
-	Channel string `json:"channel"`
-	Count   int64  `json:"count"`
+type GetRecentDownloadsByProjectRow struct {
+	UpdateID pgtype.UUID `json:"update_id"`
+	Platform string      `json:"platform"`
+	Channel  string      `json:"channel"`
+	Count    int64       `json:"count"`
 }
 
-func (q *Queries) GetGlobalDownloadsByChannel(ctx context.Context) ([]GetGlobalDownloadsByChannelRow, error) {
-	rows, err := q.db.Query(ctx, getGlobalDownloadsByChannel)
+func (q *Queries) GetRecentDownloadsByProject(ctx context.Context, projectID pgtype.UUID) ([]GetRecentDownloadsByProjectRow, error) {
+	rows, err := q.db.Query(ctx, getRecentDownloadsByProject, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetGlobalDownloadsByChannelRow
+	var items []GetRecentDownloadsByProjectRow
 	for rows.Next() {
-		var i GetGlobalDownloadsByChannelRow
-		if err := rows.Scan(&i.Channel, &i.Count); err != nil {
+		var i GetRecentDownloadsByProjectRow
+		if err := rows.Scan(
+			&i.UpdateID,
+			&i.Platform,
+			&i.Channel,
+			&i.Count,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -184,101 +122,4 @@ func (q *Queries) GetGlobalDownloadsByChannel(ctx context.Context) ([]GetGlobalD
 		return nil, err
 	}
 	return items, nil
-}
-
-const getGlobalDownloadsByPlatform = `-- name: GetGlobalDownloadsByPlatform :many
-SELECT platform, COUNT(*) AS count 
-FROM download_events 
-GROUP BY platform 
-ORDER BY count DESC
-`
-
-type GetGlobalDownloadsByPlatformRow struct {
-	Platform string `json:"platform"`
-	Count    int64  `json:"count"`
-}
-
-func (q *Queries) GetGlobalDownloadsByPlatform(ctx context.Context) ([]GetGlobalDownloadsByPlatformRow, error) {
-	rows, err := q.db.Query(ctx, getGlobalDownloadsByPlatform)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetGlobalDownloadsByPlatformRow
-	for rows.Next() {
-		var i GetGlobalDownloadsByPlatformRow
-		if err := rows.Scan(&i.Platform, &i.Count); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getGlobalRecentDownloads = `-- name: GetGlobalRecentDownloads :one
-SELECT COUNT(*) AS count 
-FROM download_events 
-WHERE timestamp > $1
-`
-
-func (q *Queries) GetGlobalRecentDownloads(ctx context.Context, timestamp pgtype.Timestamptz) (int64, error) {
-	row := q.db.QueryRow(ctx, getGlobalRecentDownloads, timestamp)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const getGlobalTotalDownloads = `-- name: GetGlobalTotalDownloads :one
-SELECT COUNT(*) AS count FROM download_events
-`
-
-func (q *Queries) GetGlobalTotalDownloads(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, getGlobalTotalDownloads)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const getRecentDownloadsByProject = `-- name: GetRecentDownloadsByProject :one
-SELECT COUNT(*) AS count
-FROM download_events
-WHERE project_id = $1
-  AND timestamp > $2
-`
-
-type GetRecentDownloadsByProjectParams struct {
-	ProjectID pgtype.UUID        `json:"project_id"`
-	Since     pgtype.Timestamptz `json:"since"`
-}
-
-func (q *Queries) GetRecentDownloadsByProject(ctx context.Context, arg GetRecentDownloadsByProjectParams) (int64, error) {
-	row := q.db.QueryRow(ctx, getRecentDownloadsByProject, arg.ProjectID, arg.Since)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const getTotalDownloadsByProject = `-- name: GetTotalDownloadsByProject :one
-SELECT COUNT(*) AS count
-FROM download_events
-WHERE project_id = $1
-`
-
-func (q *Queries) GetTotalDownloadsByProject(ctx context.Context, projectID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, getTotalDownloadsByProject, projectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const pruneOldDownloadEvents = `-- name: PruneOldDownloadEvents :exec
-DELETE FROM download_events WHERE timestamp < $1
-`
-
-func (q *Queries) PruneOldDownloadEvents(ctx context.Context, timestamp pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, pruneOldDownloadEvents, timestamp)
-	return err
 }

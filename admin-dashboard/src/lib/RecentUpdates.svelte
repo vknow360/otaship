@@ -1,7 +1,5 @@
 <script>
-	import RollbackButton from './RollbackButton.svelte';
-	import DeleteReleaseButton from './DeleteReleaseButton.svelte';
-	let { updates = [], showControls, token, projectId } = $props();
+	let { updates = [], token, projectId, showControls = true } = $props();
 </script>
 
 <div class="mt-10 overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900">
@@ -36,7 +34,7 @@
 									>Inactive</span
 								>
 							{/if}
-							{#if showControls && update.is_rollback}
+							{#if update.is_rollback}
 								<span
 									class="rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-500 uppercase"
 									>Rollback</span
@@ -73,17 +71,31 @@
 							</span>
 						</div>
 						<div class="flex flex-col items-center">
-							<span class="font-mono font-bold text-white">{update.rollout_percentage}%</span>
-							<span class="text-[10px] text-neutral-600 uppercase">Rollout</span>
+							<span class="font-mono font-bold text-white"
+								>{update.download_count?.toLocaleString() || '0'}</span
+							>
+							<span class="text-[10px] text-neutral-600 uppercase">Downloads</span>
 						</div>
-						<div class="flex items-center gap-2">
-							{#if showControls && !update.is_active}
-								<RollbackButton updateId={update.id} {token} />
-							{/if}
-							{#if showControls}
-								<DeleteReleaseButton updateId={update.id} {token} />
-							{/if}
-						</div>
+						{#if showControls}
+							<div class="flex items-center gap-2">
+								<a
+									title="View details"
+									href={`/projects/${projectId}/releases/${update.id}`}
+									class="ml-auto rounded p-2 text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-white"
+								>
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+									>
+										<polyline points="9 18 15 12 9 6"></polyline>
+									</svg>
+								</a>
+							</div>
+						{/if}
 					</div>
 				</div>
 			</div>

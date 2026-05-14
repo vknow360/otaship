@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -54,18 +53,14 @@ func (s *S3Provider) Upload(
 	key string,
 	data io.Reader,
 	contentType string,
+	size int64,
 ) (string, error) {
-	// 1. We must read the stream into memory because io.Reader has no length.
-	fileBytes, err := io.ReadAll(data)
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
-
-	_, err = s.s3.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      &s.bucket,
-		Key:         &key,
-		Body:        bytes.NewReader(fileBytes),
-		ContentType: &contentType,
+	_, err := s.s3.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        &s.bucket,
+		Key:           &key,
+		Body:          data,
+		ContentType:   &contentType,
+		ContentLength: &size,
 	})
 
 	if err != nil {

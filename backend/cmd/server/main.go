@@ -18,6 +18,8 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
 	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -138,7 +140,7 @@ func main() {
 	r.Mount("/api/project", projectRouter(db, queries, providers))
 	r.Mount("/api/admin", adminRouter(db, queries, providers))
 
-	startPruningJob(queries)
+	startAggregationJob(queries)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -219,6 +221,7 @@ func adminRouter(db *pgxpool.Pool, queries *database.Queries, providers map[stri
 	r.Delete("/projects/{project_id}/keys/{key_id}", handlers.DeleteAPIKey(queries))
 
 	r.Get("/updates", handlers.ListUpdates(queries))
+	r.Get("/updates/{update_id}", handlers.GetUpdate(queries))
 	r.Get("/updates/{update_id}/assets", handlers.ListUpdateAssets(queries))
 	r.Patch("/updates/{update_id}/rollout", handlers.UpdateRolloutPercentage(queries))
 	r.Delete("/updates/{update_id}", handlers.DeleteUpdate(queries, providers))
@@ -315,7 +318,7 @@ func runMigrations(dbURL string) error {
 	return nil
 }
 
-func startPruningJob(queries *database.Queries) {
+func startAggregationJob(queries *database.Queries) {
 	ticker := time.NewTicker(24 * time.Hour)
 	go func() {
 		for {
@@ -328,16 +331,22 @@ func startPruningJob(queries *database.Queries) {
 
 func prune(queries *database.Queries) {
 	ctx := context.Background()
-	ninetyDaysAgo := time.Now().Add(-90 * 24 * time.Hour)
+	cutoff := time.Now().UTC().Truncate(24 * time.Hour)
 
-	var pgTimestamp pgtype.Timestamptz
-	pgTimestamp.Time = ninetyDaysAgo
-	pgTimestamp.Valid = true
+	var pgCutoff pgtype.Timestamptz
+	pgCutoff.Time = cutoff
+	pgCutoff.Valid = true
 
-	err := queries.PruneOldDownloadEvents(ctx, pgTimestamp)
+	err := queries.AggregateDownloadEvents(ctx, pgCutoff)
 	if err != nil {
-		slog.Error("Failed to prune old download events", slog.Any("error", err))
+		slog.Error("Aggregation failed", slog.Any("error", err))
+		return
+	}
+
+	err = queries.DeleteAggregatedEvents(ctx, pgCutoff)
+	if err != nil {
+		slog.Error("Failed to delete aggregated events", slog.Any("error", err))
 	} else {
-		slog.Info("Successfully pruned old download events", slog.Time("until", ninetyDaysAgo))
+		slog.Info("Aggregation complete", slog.Time("cutoff", cutoff))
 	}
 }
