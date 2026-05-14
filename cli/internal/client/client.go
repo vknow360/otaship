@@ -166,7 +166,7 @@ type UpdateSummary struct {
 	IsActive          bool   `json:"is_active"`
 	IsRollback        bool   `json:"is_rollback"`
 	Message           string `json:"message"`
-	CreatedAt         string `json:"created_at"`
+	CreatedAt         int64  `json:"created_at"`
 }
 
 func (c *Client) ListUpdates(apiKey string) ([]UpdateSummary, error) {

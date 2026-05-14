@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -26,8 +24,8 @@ import (
 	"github.com/vknow360/otaship/backend/internal/database"
 	"github.com/vknow360/otaship/backend/internal/handlers"
 	"github.com/vknow360/otaship/backend/internal/logger"
+	mid "github.com/vknow360/otaship/backend/internal/middleware"
 	"github.com/vknow360/otaship/backend/internal/storage"
-	"github.com/vknow360/otaship/backend/internal/utils"
 )
 
 var accessToken string
@@ -78,6 +76,16 @@ func main() {
 	if len(providers) == 0 {
 		panic("No storage provider configured")
 	}
+
+	defaultProvider := "cloudinary"
+	if cld != nil {
+		defaultProvider = "s3"
+	}
+
+	queries.UpdateSetting(ctx, database.UpdateSettingParams{
+		Key:   "storage_provider",
+		Value: defaultProvider,
+	})
 
 	r := chi.NewRouter()
 	r.Use(logger.Middleware)
@@ -140,7 +148,7 @@ func main() {
 	r.Mount("/api/project", projectRouter(db, queries, providers))
 	r.Mount("/api/admin", adminRouter(db, queries, providers))
 
-	startAggregationJob(queries)
+	startAggregationJob(db)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -189,7 +197,7 @@ func apiRouter(queries *database.Queries) http.Handler {
 func projectRouter(db *pgxpool.Pool, queries *database.Queries, providers map[string]storage.Provider) http.Handler {
 	r := chi.NewRouter()
 	r.Use(httprate.LimitByIP(30, time.Minute))
-	r.Use(ProjectKeyOnly(queries))
+	r.Use(mid.ProjectKeyOnly(queries))
 	r.Get("/me", handlers.GetMe(queries))
 
 	r.Post("/{project_id}/updates/{update_id}/upload", handlers.UploadAsset(db, queries, providers))
@@ -204,7 +212,7 @@ func projectRouter(db *pgxpool.Pool, queries *database.Queries, providers map[st
 func adminRouter(db *pgxpool.Pool, queries *database.Queries, providers map[string]storage.Provider) http.Handler {
 	r := chi.NewRouter()
 	r.Use(httprate.LimitByIP(100, time.Minute))
-	r.Use(AdminOnly(accessToken))
+	r.Use(mid.AdminOnly(accessToken))
 
 	r.Get("/verify", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"status": "ok"}`))
@@ -237,72 +245,6 @@ func adminRouter(db *pgxpool.Pool, queries *database.Queries, providers map[stri
 	return r
 }
 
-func AdminOnly(token string) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
-				bearerToken := after
-				if utils.CalculateSHA256([]byte(bearerToken)) == token {
-					next.ServeHTTP(w, r)
-					return
-				}
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
-		})
-	}
-}
-
-func ProjectKeyOnly(queries *database.Queries) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			apiKey := r.Header.Get("X-API-Key")
-			if apiKey == "" {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
-				return
-			}
-
-			if len(apiKey) < 16 {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Invalid API key"})
-				return
-			}
-
-			keySuffix := apiKey[len(apiKey)-16:]
-			key, err := queries.GetAPIKeyBySuffix(r.Context(), keySuffix)
-			if err != nil {
-				slog.ErrorContext(r.Context(), "Error fetching project by key suffix",
-					slog.String("suffix", keySuffix),
-					slog.Any("error", err),
-				)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Invalid API key"})
-				return
-			}
-
-			hash := sha256.Sum256([]byte(apiKey))
-			computed := hex.EncodeToString(hash[:])
-			if computed != key.KeyHash {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Invalid API key"})
-				return
-			}
-			go func() {
-				queries.UpdateAPIKeyLastUsed(context.Background(), key.ID)
-
-			}()
-			next.ServeHTTP(w, r.WithContext(utils.SetProjectId(r.Context(), key.ProjectID)))
-		})
-	}
-}
-
 func runMigrations(dbURL string) error {
 	m, err := migrate.New(
 		"file://migrations",
@@ -318,18 +260,18 @@ func runMigrations(dbURL string) error {
 	return nil
 }
 
-func startAggregationJob(queries *database.Queries) {
+func startAggregationJob(pool *pgxpool.Pool) {
 	ticker := time.NewTicker(24 * time.Hour)
 	go func() {
 		for {
 			// Run immediately on startup, then on every tick
-			prune(queries)
+			prune(pool)
 			<-ticker.C
 		}
 	}()
 }
 
-func prune(queries *database.Queries) {
+func prune(pool *pgxpool.Pool) {
 	ctx := context.Background()
 	cutoff := time.Now().UTC().Truncate(24 * time.Hour)
 
@@ -337,16 +279,30 @@ func prune(queries *database.Queries) {
 	pgCutoff.Time = cutoff
 	pgCutoff.Valid = true
 
-	err := queries.AggregateDownloadEvents(ctx, pgCutoff)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		slog.Error("Failed to begin transaction", slog.Any("error", err))
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := database.New(tx)
+
+	err = qtx.AggregateDownloadEvents(ctx, pgCutoff)
 	if err != nil {
 		slog.Error("Aggregation failed", slog.Any("error", err))
 		return
 	}
 
-	err = queries.DeleteAggregatedEvents(ctx, pgCutoff)
+	err = qtx.DeleteAggregatedEvents(ctx, pgCutoff)
 	if err != nil {
 		slog.Error("Failed to delete aggregated events", slog.Any("error", err))
 	} else {
 		slog.Info("Aggregation complete", slog.Time("cutoff", cutoff))
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		slog.Error("Failed to commit transaction", slog.Any("error", err))
 	}
 }

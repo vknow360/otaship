@@ -1,0 +1,33 @@
+import { redirect } from '@sveltejs/kit';
+import { PUBLIC_API_URL } from '$env/static/public';
+
+export const actions = {
+	default: async ({ request, cookies }) => {
+		const data = await request.formData();
+		const token = data.get('token');
+		
+		const API_BASE = PUBLIC_API_URL || 'http://localhost:8080';
+
+		try {
+			const res = await fetch(`${API_BASE}/api/admin/verify`, {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			
+			if (!res.ok) {
+				return { error: 'Invalid admin token' };
+			}
+			
+			cookies.set('otaship_token', token.toString(), {
+				path: '/',
+				maxAge: 86400,
+				httpOnly: true,
+				secure: true,
+				sameSite: 'strict'
+			});
+		} catch (err) {
+			return { error: 'Failed to connect to server' };
+		}
+		
+		throw redirect(303, '/');
+	}
+};

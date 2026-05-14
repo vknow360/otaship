@@ -10,3 +10,5 @@ CREATE TABLE download_stats (
 );
 
 CREATE INDEX idx_download_stats_project ON download_stats(project_id);
+CREATE INDEX idx_download_stats_update ON download_stats(update_id);
+CREATE UNIQUE INDEX updates_one_active_idx ON updates (project_id, channel, platform, runtime_version) WHERE is_active = true;

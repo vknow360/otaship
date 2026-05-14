@@ -10,6 +10,10 @@ import (
 	"github.com/vknow360/otaship/backend/internal/storage"
 )
 
+var allowedSettings = map[string]bool{
+	"storage_provider": true,
+}
+
 func GetSettings(queries *database.Queries, providers map[string]storage.Provider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		settings, err := queries.GetSettings(r.Context())
@@ -58,6 +62,12 @@ func UpdateSetting(queries *database.Queries) http.HandlerFunc {
 			jsonError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+
+		if !allowedSettings[setting.Key] {
+			jsonError(w, "setting not allowed", http.StatusBadRequest)
+			return
+		}
+
 		if err := queries.UpdateSetting(r.Context(), setting); err != nil {
 			slog.Error("Failed to update setting", "error", err)
 			json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"})

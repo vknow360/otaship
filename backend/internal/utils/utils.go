@@ -70,6 +70,11 @@ func CalculateSHA256(data []byte) string {
 }
 
 func getClientIP(r *http.Request) string {
+	forwarded := r.Header.Get("x-forwarded-for")
+	if forwarded != "" {
+		parts := strings.SplitN(forwarded, ",", 2)
+		return strings.TrimSpace(parts[0])
+	}
 	ip := strings.TrimSpace(r.RemoteAddr)
 	if ip == "" {
 		return "unknown"

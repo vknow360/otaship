@@ -111,7 +111,11 @@ func CheckForUpdates(queries *database.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "project_id")
 
-		projectId, _ := utils.ParseUUID(id)
+		projectId, err := utils.ParseUUID(id)
+		if err != nil {
+			jsonError(w, "Invalid project ID", http.StatusBadRequest)
+			return
+		}
 
 		protocolVersionStr := r.Header.Get("expo-protocol-version")
 		if protocolVersionStr == "" {

@@ -1,33 +1,10 @@
 <script>
-	import { goto } from '$app/navigation';
+	import { enhance } from '$app/forms';
 	import icon from '$lib/assets/icon-512.png';
 
+	let { form } = $props();
 	let token = $state('');
-	let error = $state(null);
 	let loading = $state(false);
-
-	async function handleLogin(e) {
-		e.preventDefault();
-		error = null;
-		loading = true;
-
-		try {
-			const API_BASE = import.meta.env.PUBLIC_API_BASE || 'http://localhost:8080';
-			const res = await fetch(`${API_BASE}/api/admin/verify`, {
-				headers: { Authorization: `Bearer ${token}` }
-			});
-			if (!res.ok) {
-				error = 'Invalid token';
-			} else {
-				document.cookie = `otaship_token=${token}; path=/; max-age=86400; SameSite=Strict; Secure;`;
-				goto('/');
-			}
-		} catch (err) {
-			error = 'Invalid token provided. Please try again.';
-		} finally {
-			loading = false;
-		}
-	}
 </script>
 
 <div
@@ -40,11 +17,18 @@
 			<p class="mt-2 text-sm text-neutral-500">Sign in to dashboard</p>
 		</div>
 
-		<form onsubmit={handleLogin} class="space-y-4">
+		<form method="POST" use:enhance={() => {
+			loading = true;
+			return async ({ update }) => {
+				await update();
+				loading = false;
+			};
+		}} class="space-y-4">
 			<div>
 				<label for="adminToken" class="mb-4 text-neutral-500">Enter admin token</label>
 				<input
 					id="adminToken"
+					name="token"
 					type="password"
 					bind:value={token}
 					placeholder="Admin token..."
@@ -53,8 +37,8 @@
 				/>
 			</div>
 
-			{#if error}
-				<div class="px-1 text-sm text-red-500">{error}</div>
+			{#if form?.error}
+				<div class="px-1 text-sm text-red-500">{form?.error}</div>
 			{/if}
 
 			<button

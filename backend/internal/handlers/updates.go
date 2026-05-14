@@ -121,12 +121,18 @@ func ListUpdates(queries *database.Queries) http.HandlerFunc {
 		}
 
 		resp := make([]UpdateResponse, len(updates))
+
+		updateIds := make([]pgtype.UUID, len(updates))
 		for i, u := range updates {
-			count, err := queries.GetTotalDownloadsByUpdateID(r.Context(), u.ID)
-			if err != nil {
-				count = 0
-			}
-			resp[i] = toUpdateResponse(u, count)
+			updateIds[i] = u.ID
+		}
+
+		counts, err := queries.GetDownloadCountsByUpdateIDs(r.Context(), updateIds)
+		if err != nil {
+			counts = []database.GetDownloadCountsByUpdateIDsRow{}
+		}
+		for i, u := range updates {
+			resp[i] = toUpdateResponse(u, int64(counts[i].Count))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -158,12 +164,18 @@ func ListProjectUpdates(queries *database.Queries) http.HandlerFunc {
 		}
 
 		resp := make([]UpdateResponse, len(updates))
+		updateIds := make([]pgtype.UUID, len(updates))
 		for i, u := range updates {
-			count, err := queries.GetTotalDownloadsByUpdateID(r.Context(), u.ID)
-			if err != nil {
-				count = 0
-			}
-			resp[i] = toUpdateResponse(u, count)
+			updateIds[i] = u.ID
+		}
+
+		counts, err := queries.GetDownloadCountsByUpdateIDs(r.Context(), updateIds)
+		if err != nil {
+			counts = []database.GetDownloadCountsByUpdateIDsRow{}
+		}
+
+		for i, u := range updates {
+			resp[i] = toUpdateResponse(u, int64(counts[i].Count))
 		}
 
 		w.Header().Set("Content-Type", "application/json")

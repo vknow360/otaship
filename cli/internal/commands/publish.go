@@ -178,19 +178,28 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	ui.Success.Printf("Project: %s\n", project.Name)
 	ui.Success.Printf("Runtime: %s\n", appJson.Expo.RuntimeVersion)
 
-	publish := func(p string, updateReq *client.CreateUpdateRequest) error {
-		if dryRunFlag {
-			ui.Info.Printf("[DRY RUN] Would create update for %s (Runtime: %s, Channel: %s)\n",
-				p, updateReq.RuntimeVersion, updateReq.Channel)
-		} else {
-			update, err := c.CreateUpdate(apiKey, updateReq)
-			if err != nil {
-				return fmt.Errorf("failed to create update: %w", err)
-			}
-			ui.Success.Printf("Created update: %s\n", update.ID)
-			updateReq.ID = update.ID
+	createUpdate := func(p string) (string, error) {
+		req := &client.CreateUpdateRequest{
+			ProjectID:         projectCfg.ProjectID,
+			RolloutPercentage: rollout,
+			Channel:           channel,
+			RuntimeVersion:    appJson.Expo.RuntimeVersion,
+			Platform:          p,
+			Message:           updateMessage,
 		}
+		if dryRunFlag {
+			ui.Info.Printf("[DRY RUN] Would create update for %s (Runtime: %s, Channel: %s)\n", p, req.RuntimeVersion, req.Channel)
+			return "DRY-RUN", nil
+		}
+		update, err := c.CreateUpdate(apiKey, req)
+		if err != nil {
+			return "", fmt.Errorf("failed to create update for %s: %w", p, err)
+		}
+		ui.Success.Printf("Created update for %s: %s\n", p, update.ID)
+		return update.ID, nil
+	}
 
+	uploadBundle := func(p string, updateID string) error {
 		spinner, _ := ui.StartSpinner(fmt.Sprintf("Packaging %s bundle...", p))
 		bundleZip, err := zipDistFolder(projectRoot, p)
 		if err != nil {
@@ -204,72 +213,89 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			fi, _ := os.Stat(bundleZip)
 			ui.Info.Printf("[DRY RUN] Would upload %s bundle (Size: %s)\n", p, formatSize(fi.Size()))
 			ui.Success.Printf("[DRY RUN] %s publish simulated successfully\n", p)
-			ui.Info.Printf("Update ID: [DRY-RUN]\n")
-		} else {
-			spinner, _ = ui.StartSpinner(fmt.Sprintf("Uploading %s bundle...", p))
-			if err := c.UploadBundle(projectCfg.ProjectID, updateReq.ID, p, apiKey, bundleZip); err != nil {
-				spinner.Fail(fmt.Sprintf("%s upload failed", p))
-				return fmt.Errorf("%s upload failed: %w", p, err)
-			}
-			spinner.Success(fmt.Sprintf("Uploaded %s bundle", p))
-			ui.Success.Println("Published successfully!")
-			ui.Info.Printf("Update ID: %s\n", updateReq.ID)
+			return nil
 		}
-		ui.Info.Printf("Channel: %s\n", channel)
+
+		spinner, _ = ui.StartSpinner(fmt.Sprintf("Uploading %s bundle...", p))
+		if err := c.UploadBundle(projectCfg.ProjectID, updateID, p, apiKey, bundleZip); err != nil {
+			spinner.Fail(fmt.Sprintf("%s upload failed", p))
+			return fmt.Errorf("%s upload failed: %w", p, err)
+		}
+		spinner.Success(fmt.Sprintf("Uploaded %s bundle", p))
+		ui.Success.Printf("Published %s successfully!\n", p)
 		return nil
 	}
 
+	deleteUpdate := func(updateID string) {
+		if dryRunFlag || updateID == "DRY-RUN" || updateID == "" {
+			return
+		}
+		_ = c.DeleteUpdate(apiKey, updateID)
+	}
+
+	runExport := func(p string) error {
+		if skipExport {
+			ui.Info.Printf("Skipped expo export for %s\n", p)
+			return nil
+		}
+		spinner, _ := ui.StartSpinner(fmt.Sprintf("Running expo export for %s...", p))
+		err := runExpoExport(projectRoot, p)
+		if err != nil {
+			spinner.Fail(fmt.Sprintf("Expo export for %s failed", p))
+			return fmt.Errorf("expo export for %s failed: %w", p, err)
+		}
+		spinner.Success(fmt.Sprintf("Exported %s bundle", p))
+		return nil
+	}
+
+	var androidID, iosID string
+
 	if platform == "all" || platform == "android" {
-		if !skipExport {
-			spinner, _ := ui.StartSpinner("Running expo export for android...")
-			err = runExpoExport(projectRoot, "android")
-			if err != nil {
-				spinner.Fail("Expo export failed")
-				return fmt.Errorf("expo export failed: %w", err)
-			}
-			spinner.Success("Exported android bundle")
-		} else {
-			ui.Info.Println("Skipped expo export")
+		if err := runExport("android"); err != nil {
+			return err
 		}
-
-		err := publish("android", &client.CreateUpdateRequest{
-			ProjectID:         projectCfg.ProjectID,
-			RolloutPercentage: rollout,
-			Channel:           channel,
-			RuntimeVersion:    appJson.Expo.RuntimeVersion,
-			Platform:          "android",
-			Message:           updateMessage,
-		})
-
+		androidID, err = createUpdate("android")
 		if err != nil {
 			return err
 		}
 	}
+
 	if platform == "all" || platform == "ios" {
-		if !skipExport {
-			spinner, _ := ui.StartSpinner("Running expo export for ios...")
-			err = runExpoExport(projectRoot, "ios")
-			if err != nil {
-				spinner.Fail("Expo export failed")
-				return fmt.Errorf("expo export failed: %w", err)
+		if err := runExport("ios"); err != nil {
+			if androidID != "" {
+				deleteUpdate(androidID)
 			}
-			spinner.Success("Exported ios bundle")
-		} else {
-			ui.Info.Println("Skipped expo export")
+			return err
 		}
-		err := publish("ios", &client.CreateUpdateRequest{
-			ProjectID:         projectCfg.ProjectID,
-			RolloutPercentage: rollout,
-			Channel:           channel,
-			RuntimeVersion:    appJson.Expo.RuntimeVersion,
-			Platform:          "ios",
-			Message:           updateMessage,
-		})
-
+		iosID, err = createUpdate("ios")
 		if err != nil {
+			if androidID != "" {
+				deleteUpdate(androidID)
+			}
 			return err
 		}
 	}
+
+	if androidID != "" {
+		if err = uploadBundle("android", androidID); err != nil {
+			deleteUpdate(androidID)
+			if iosID != "" {
+				deleteUpdate(iosID)
+			}
+			return err
+		}
+	}
+
+	if iosID != "" {
+		if err = uploadBundle("ios", iosID); err != nil {
+			if androidID != "" {
+				deleteUpdate(androidID)
+			}
+			deleteUpdate(iosID)
+			return err
+		}
+	}
+
 	return nil
 }
 

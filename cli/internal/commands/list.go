@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
@@ -55,10 +56,7 @@ func runList(cmd *cobra.Command, args []string) error {
 			active = "↩"
 		}
 
-		created := u.CreatedAt
-		if len(created) > 19 {
-			created = created[:19]
-		}
+		created := time.UnixMilli(u.CreatedAt).Local().Format("2006-01-02 15:04")
 
 		tableData = append(tableData, []string{
 			u.ID, u.Platform, u.RuntimeVersion, u.Channel,

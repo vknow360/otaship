@@ -68,7 +68,6 @@ func Middleware(next http.Handler) http.Handler {
 		slog.InfoContext(ctx, "Request started",
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
-			slog.String("remote_addr", r.RemoteAddr),
 		)
 
 		next.ServeHTTP(sw, r.WithContext(ctx))

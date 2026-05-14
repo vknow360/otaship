@@ -112,6 +112,56 @@ func (q *Queries) DeleteUpdate(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
+const getDownloadCountsByUpdateIDs = `-- name: GetDownloadCountsByUpdateIDs :many
+WITH stats AS (
+    SELECT
+        update_id,
+        SUM(download_count)::bigint AS count
+    FROM download_stats
+    WHERE update_id = ANY($1::uuid[])
+    GROUP BY update_id
+),
+events AS (
+    SELECT
+        update_id,
+        COUNT(*)::bigint AS count
+    FROM download_events
+    WHERE update_id = ANY($1::uuid[])
+    GROUP BY update_id
+)
+SELECT
+    COALESCE(stats.update_id, events.update_id) AS update_id,
+    COALESCE(stats.count, 0) + COALESCE(events.count, 0) AS count
+FROM stats
+FULL OUTER JOIN events
+ON stats.update_id = events.update_id
+`
+
+type GetDownloadCountsByUpdateIDsRow struct {
+	UpdateID pgtype.UUID `json:"update_id"`
+	Count    int32       `json:"count"`
+}
+
+func (q *Queries) GetDownloadCountsByUpdateIDs(ctx context.Context, dollar_1 []pgtype.UUID) ([]GetDownloadCountsByUpdateIDsRow, error) {
+	rows, err := q.db.Query(ctx, getDownloadCountsByUpdateIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetDownloadCountsByUpdateIDsRow
+	for rows.Next() {
+		var i GetDownloadCountsByUpdateIDsRow
+		if err := rows.Scan(&i.UpdateID, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLatestActiveUpdate = `-- name: GetLatestActiveUpdate :one
 SELECT id, project_id, runtime_version, channel, rollout_percentage, platform, is_active, is_rollback, message, expo_config, created_at FROM updates 
 WHERE is_active = true 

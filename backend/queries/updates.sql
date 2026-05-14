@@ -70,3 +70,26 @@ UPDATE updates
 SET is_active = true
 WHERE id = $1;
 
+-- name: GetDownloadCountsByUpdateIDs :many
+WITH stats AS (
+    SELECT
+        update_id,
+        SUM(download_count)::bigint AS count
+    FROM download_stats
+    WHERE update_id = ANY($1::uuid[])
+    GROUP BY update_id
+),
+events AS (
+    SELECT
+        update_id,
+        COUNT(*)::bigint AS count
+    FROM download_events
+    WHERE update_id = ANY($1::uuid[])
+    GROUP BY update_id
+)
+SELECT
+    COALESCE(stats.update_id, events.update_id) AS update_id,
+    COALESCE(stats.count, 0) + COALESCE(events.count, 0) AS count
+FROM stats
+FULL OUTER JOIN events
+ON stats.update_id = events.update_id;

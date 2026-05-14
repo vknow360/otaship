@@ -3,21 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/vknow360/otaship/backend/internal/database"
 	"github.com/vknow360/otaship/backend/internal/utils"
 	"golang.org/x/sync/errgroup"
 )
-
-func since() pgtype.Timestamptz {
-	return pgtype.Timestamptz{
-		Time:  time.Now().Add(-24 * time.Hour),
-		Valid: true,
-	}
-}
 
 func GetProjectStats(queries *database.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -68,8 +59,6 @@ func GetProjectStats(queries *database.Queries) http.HandlerFunc {
 			platforms[r.Platform] += r.Count
 			channels[r.Channel] += r.Count
 		}
-
-		totalDownloads += recentDownloads
 
 		for _, r := range total {
 			totalDownloads += r.Count
