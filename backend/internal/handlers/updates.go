@@ -131,8 +131,14 @@ func ListUpdates(queries *database.Queries) http.HandlerFunc {
 		if err != nil {
 			counts = []database.GetDownloadCountsByUpdateIDsRow{}
 		}
+
+		countMap := make(map[pgtype.UUID]int64)
+		for _, count := range counts {
+			countMap[count.UpdateID] = int64(count.Count)
+		}
+
 		for i, u := range updates {
-			resp[i] = toUpdateResponse(u, int64(counts[i].Count))
+			resp[i] = toUpdateResponse(u, countMap[u.ID])
 		}
 
 		w.Header().Set("Content-Type", "application/json")

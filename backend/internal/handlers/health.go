@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,7 +33,8 @@ func HealthCheck(db *pgxpool.Pool) http.HandlerFunc {
 
 func statusString(err error) string {
 	if err != nil {
-		return "error: " + err.Error()
+		slog.Error("Database error", slog.Any("error", err))
+		return "error"
 	}
 	return "ok"
 }

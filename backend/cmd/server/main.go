@@ -78,7 +78,7 @@ func main() {
 	}
 
 	defaultProvider := "cloudinary"
-	if cld != nil {
+	if cld == nil {
 		defaultProvider = "s3"
 	}
 

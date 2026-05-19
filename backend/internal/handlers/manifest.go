@@ -361,11 +361,10 @@ func shouldReceiveUpdate(percentage int, deviceHash string) bool {
 	if percentage <= 0 {
 		return false
 	}
-	var hashSum int
-	for _, c := range deviceHash {
-		hashSum += int(c)
-	}
-	return (hashSum % 100) < percentage
+
+	hashPrefix := deviceHash[:8]
+	val, _ := strconv.ParseUint(hashPrefix, 16, 32)
+	return int(val%100) < percentage
 }
 
 func sendMultipartResponse(

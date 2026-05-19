@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
@@ -19,7 +20,8 @@ func AdminOnly(token string) func(next http.Handler) http.Handler {
 			authHeader := r.Header.Get("Authorization")
 			if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
 				bearerToken := after
-				if utils.CalculateSHA256([]byte(bearerToken)) == token {
+				computed := utils.CalculateSHA256([]byte(bearerToken))
+				if subtle.ConstantTimeCompare([]byte(computed), []byte(token)) == 1 {
 					next.ServeHTTP(w, r)
 					return
 				}

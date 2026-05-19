@@ -9,3 +9,8 @@ req.http
 
 # Compiled binary
 *.exe
+
+# Coverage
+coverage
+coverage.html
+*.out
