@@ -61,15 +61,17 @@ func main() {
 
 	s3, err := storage.NewS3Provider()
 	if err != nil {
-		slog.Error("Failed to connect to S3")
+		slog.Error("Failed to connect to S3", slog.String("error", err.Error()))
 	} else {
+		slog.Info("Connected to S3")
 		providers["s3"] = s3
 	}
 
 	cld, err := storage.NewCloudinaryProvider()
 	if err != nil {
-		slog.Error("Failed to connect to Cloudinary")
+		slog.Error("Failed to connect to Cloudinary", slog.String("error", err.Error()))
 	} else {
+		slog.Info("Connected to Cloudinary")
 		providers["cloudinary"] = cld
 	}
 
