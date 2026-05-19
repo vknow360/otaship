@@ -77,15 +77,7 @@ func main() {
 		panic("No storage provider configured")
 	}
 
-	defaultProvider := "cloudinary"
-	if cld == nil {
-		defaultProvider = "s3"
-	}
-
-	queries.UpdateSetting(ctx, database.UpdateSettingParams{
-		Key:   "storage_provider",
-		Value: defaultProvider,
-	})
+	setDefaultProvider(queries, providers)
 
 	r := chi.NewRouter()
 	r.Use(logger.Middleware)
@@ -304,5 +296,23 @@ func prune(pool *pgxpool.Pool) {
 	err = tx.Commit(ctx)
 	if err != nil {
 		slog.Error("Failed to commit transaction", slog.Any("error", err))
+	}
+}
+
+func setDefaultProvider(queries *database.Queries, providers map[string]storage.Provider) {
+	ctx := context.Background()
+
+	_, err := queries.GetSetting(ctx, "storage_provider")
+	if err != nil {
+		defaultProvider := ""
+		if providers["cloudinary"] != nil {
+			defaultProvider = "cloudinary"
+		} else if providers["s3"] != nil {
+			defaultProvider = "s3"
+		}
+		queries.UpdateSetting(ctx, database.UpdateSettingParams{
+			Key:   "storage_provider",
+			Value: defaultProvider,
+		})
 	}
 }

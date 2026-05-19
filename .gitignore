@@ -59,10 +59,10 @@ coverage/
 *.pem
 
 # Docker
-Dockerfile
 docker-compose.yml
 docker-compose.override.yml
 .dockerignore
+
 
 # Github
 .github/workflows
