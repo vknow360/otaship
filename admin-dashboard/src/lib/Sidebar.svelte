@@ -1,12 +1,7 @@
 <script>
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
+	import { enhance } from '$app/forms';
 	import icon from '$lib/assets/icon-512.png';
-
-	function handleLogout() {
-		document.cookie = 'otaship_token=; path=/; max-age=0';
-		goto('/login');
-	}
 </script>
 
 <div class="flex min-h-screen w-52 flex-col border-r border-gray-800">
@@ -37,10 +32,12 @@
 
 	<div class="mt-auto w-full px-4 pb-8">
 		<hr class="mb-5 h-px border-0 border-gray-800 bg-gray-800" />
-		<button
-			onclick={handleLogout}
-			class="w-full cursor-pointer rounded-lg bg-gray-800 px-4 py-2 text-white transition-colors hover:bg-gray-700"
-			>Logout</button
-		>
+		<form action="/logout" method="POST" use:enhance class="w-full">
+			<button
+				type="submit"
+				class="w-full cursor-pointer rounded-lg bg-gray-800 px-4 py-2 text-white transition-colors hover:bg-gray-700"
+				>Logout</button
+			>
+		</form>
 	</div>
 </div>
