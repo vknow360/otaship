@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -205,9 +204,12 @@ func UploadAsset(pool *pgxpool.Pool, queries *database.Queries, providers map[st
 		}
 
 		filesToUpload := make(map[string]bool)
-		filesToUpload[normalizeAssetPath(platformMetadata.Bundle)] = true
+		normalizedBundle := normalizeAssetPath(platformMetadata.Bundle)
+		filesToUpload[normalizedBundle] = true
+
 		for _, asset := range platformMetadata.Assets {
-			filesToUpload[normalizeAssetPath(asset.Path)] = true
+			normalized := normalizeAssetPath(asset.Path)
+			filesToUpload[normalized] = true
 		}
 
 		providerName, err := qtx.GetSetting(r.Context(), "storage_provider")
@@ -509,5 +511,7 @@ func buildStorageKey(projectSlug, updateID, platform, fileName string) string {
 }
 
 func normalizeAssetPath(path string) string {
-	return filepath.ToSlash(strings.TrimPrefix(path, "./"))
+	cleaned := strings.TrimPrefix(path, "./")
+	result := strings.ReplaceAll(cleaned, "\\", "/")
+	return result
 }

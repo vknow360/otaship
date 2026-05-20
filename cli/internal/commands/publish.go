@@ -360,6 +360,7 @@ func zipDistFolder(projectRoot, platform string) (string, error) {
 		}
 
 		relPath, _ := filepath.Rel(distDir, path)
+		relPath = filepath.ToSlash(relPath)
 
 		writer, err := zipWriter.Create(relPath)
 		if err != nil {
