@@ -14,7 +14,7 @@ import (
 
 var InstallCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install OTAship CLI",
+	Short: "Install OTAShip CLI",
 	RunE:  runInstall,
 }
 

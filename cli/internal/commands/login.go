@@ -13,7 +13,7 @@ import (
 
 var LoginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Set OTAship server URL",
+	Short: "Set OTAShip server URL",
 	RunE:  runLogin,
 }
 

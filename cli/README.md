@@ -1,6 +1,6 @@
-### Architecture and Functional Review: OTAship CLI Tool
+### Architecture and Functional Review: OTAShip CLI Tool
 
-This review evaluates the architecture, implementation, and functionality of the OTAship CLI tool, based on the codebase in `E:/otaship/cli`.
+This review evaluates the architecture, implementation, and functionality of the OTAShip CLI tool, based on the codebase in `E:/otaship/cli`.
 
 ---
 
@@ -12,7 +12,7 @@ The CLI follows a standard Go project layout, promoting a clean separation of co
 *   **Configuration (`internal/config/`):** Manages two types of configuration:
     *   **Global (`~/.otaship/config.json`):** Stores server URL and a map of project slugs to API keys.
     *   **Project (`otaship.json`):** Stores project-specific metadata like `projectId` and `channel`.
-*   **API Client (`internal/client/`):** Encapsulates HTTP interactions with the OTAship backend. It uses simple `net/http` calls, which is appropriate for a tool of this size.
+*   **API Client (`internal/client/`):** Encapsulates HTTP interactions with the OTAShip backend. It uses simple `net/http` calls, which is appropriate for a tool of this size.
 
 ---
 
@@ -50,4 +50,4 @@ The tool covers the essential lifecycle for managing OTA updates for Expo applic
     *   *Recommendation:* While common for developer tools, consider using a platform-specific keyring (e.g., `keytar` or `credential-helper` style) for sensitive keys in the future.
 
 ### 4. Conclusion
-The OTAship CLI is architecturally sound and functionally complete for its intended purpose. It follows Go idioms and provides a reliable workflow for Expo developers. The primary focus for future development should be adding automated tests and hardening error handling in the API communication layer.
+The OTAShip CLI is architecturally sound and functionally complete for its intended purpose. It follows Go idioms and provides a reliable workflow for Expo developers. The primary focus for future development should be adding automated tests and hardening error handling in the API communication layer.

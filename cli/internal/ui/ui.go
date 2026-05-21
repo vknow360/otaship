@@ -21,7 +21,7 @@ func ExitError(msg string, err error) {
 }
 
 func PrintBanner() {
-	pterm.DefaultHeader.WithMargin(1).WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgCyan)).Println("OTAship CLI")
+	pterm.DefaultHeader.WithMargin(1).WithFullWidth().WithBackgroundStyle(pterm.NewStyle(pterm.BgCyan)).Println("OTAShip CLI")
 }
 
 func IsInteractive() bool {

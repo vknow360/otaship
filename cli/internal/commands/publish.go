@@ -115,7 +115,7 @@ func showSummary(platform, channel, runtime, message string, rollout int, dryRun
 func runPublish(cmd *cobra.Command, args []string) error {
 	projectCfg, err := config.LoadProjectConfig()
 	if err != nil || projectCfg == nil {
-		return fmt.Errorf("not in an OTAship project. Run 'otaship init'")
+		return fmt.Errorf("not in an OTAShip project. Run 'otaship init'")
 	}
 
 	projectRoot, err := config.FindProjectRoot()

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -28,10 +29,21 @@ import (
 	"github.com/vknow360/otaship/backend/internal/storage"
 )
 
-var accessToken string
+var (
+	accessToken string
+	Version     = "dev"
+	BuildDate   = "unknown"
+)
 
 func main() {
 	err := godotenv.Load()
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	printBanner(port)
+
 	if err != nil {
 		slog.Warn("Warning: .env file not found. Using environment variables.")
 	}
@@ -145,11 +157,6 @@ func main() {
 	startAggregationJob(db)
 
 	// Start server
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
 	srv := &http.Server{
 		Addr:    ":" + port,
 		Handler: r,
@@ -317,4 +324,41 @@ func setDefaultProvider(queries *database.Queries, providers map[string]storage.
 			Value: defaultProvider,
 		})
 	}
+}
+
+// printBanner prints the server startup banner.
+func printBanner(port string) {
+	cyan := "\033[36m"
+	white := "\033[97m"
+	reset := "\033[0m"
+	bold := "\033[1m"
+
+	logo := cyan + `
+  ██████╗ ████████╗ █████╗ ███████╗██╗  ██╗██╗██████╗ 
+ ██╔═══██╗╚══██╔══╝██╔══██╗██╔════╝██║  ██║██║██╔══██╗
+ ██║   ██║   ██║   ███████║███████╗███████║██║██████╔╝
+ ██║   ██║   ██║   ██╔══██║╚════██║██╔══██║██║██╔═══╝ 
+ ╚██████╔╝   ██║   ██║  ██║███████║██║  ██║██║██║     
+  ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚═╝` + reset
+
+	versionLine := fmt.Sprintf("OTAShip v%s", Version)
+	buildLine := fmt.Sprintf("Build Date: %s", BuildDate)
+	urlLine := fmt.Sprintf("http://localhost:%s", port)
+
+	logoWidth := 54
+
+	centerPrint := func(text string, format string) {
+		pad := (logoWidth - len(text)) / 2
+		if pad < 0 {
+			pad = 0
+		}
+		fmt.Printf(format, strings.Repeat(" ", pad), text)
+	}
+
+	fmt.Println(logo)
+	fmt.Println()
+	centerPrint(versionLine, "%s"+white+bold+"%s"+reset+"\n")
+	centerPrint(buildLine, "%s"+white+"%s"+reset+"\n")
+	centerPrint(urlLine, "%s"+cyan+"%s"+reset+"\n")
+	fmt.Println()
 }

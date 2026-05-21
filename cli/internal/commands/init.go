@@ -14,7 +14,7 @@ import (
 
 var InitCommand = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize OTAship for the current project",
+	Short: "Initialize OTAShip for the current project",
 	RunE:  runInit,
 }
 

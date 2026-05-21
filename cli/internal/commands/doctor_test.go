@@ -31,12 +31,12 @@ func TestDoctorCommand(t *testing.T) {
 	}
 
 	output := buf.String()
-	
+
 	// We check the returned error since rootCmd error handling is in main.go
-	if !strings.Contains(err.Error(), "no server configured") && !strings.Contains(err.Error(), "not in an OTAship project") && !strings.Contains(err.Error(), "cannot find") && !strings.Contains(err.Error(), "no such file") && !strings.Contains(err.Error(), "The system cannot find the file specified") && !strings.Contains(err.Error(), "system cannot find") && !strings.Contains(err.Error(), "file does not exist") {
+	if !strings.Contains(err.Error(), "no server configured") && !strings.Contains(err.Error(), "not in an OTAShip project") && !strings.Contains(err.Error(), "cannot find") && !strings.Contains(err.Error(), "no such file") && !strings.Contains(err.Error(), "The system cannot find the file specified") && !strings.Contains(err.Error(), "system cannot find") && !strings.Contains(err.Error(), "file does not exist") {
 		t.Errorf("Expected error complaining about missing file or config, got: %q", err.Error())
 	}
-	
+
 	// The buffer should not contain ERROR since the ERROR prefix is printed by main.go
 	// However, if there was intermediate output (e.g. "Config loaded"), we would see it here.
 	if strings.Contains(output, "ERROR") {

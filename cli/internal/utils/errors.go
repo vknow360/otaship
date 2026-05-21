@@ -78,7 +78,7 @@ func HandleHTTPError(resp *http.Response) error {
 		if err := json.Unmarshal(body, &apiErr); err == nil {
 			return NewUserError(apiErr.Error, apiErr.Hint)
 		}
-		return NewUserError("Server error", "Contact your OTAship server admin")
+		return NewUserError("Server error", "Contact your OTAShip server admin")
 	default:
 		return NewUserError(
 			fmt.Sprintf("HTTP %d error", resp.StatusCode),

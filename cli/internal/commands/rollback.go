@@ -21,7 +21,7 @@ func runRollback(cmd *cobra.Command, args []string) error {
 
 	projectCfg, err := config.LoadProjectConfig()
 	if err != nil || projectCfg == nil {
-		return fmt.Errorf("not in an OTAship project. Run 'otaship init'")
+		return fmt.Errorf("not in an OTAShip project. Run 'otaship init'")
 	}
 
 	cfg, err := config.LoadGlobalConfig()
