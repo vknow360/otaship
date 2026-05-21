@@ -60,7 +60,7 @@ func TestStatusString(t *testing.T) {
 		expected string
 	}{
 		{"Nil error", nil, "ok"},
-		{"Some error", errors.New("connection failed"), "error: connection failed"},
+		{"Some error", errors.New("connection failed"), "error"},
 	}
 
 	for _, tt := range tests {

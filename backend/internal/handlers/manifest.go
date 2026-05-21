@@ -362,8 +362,12 @@ func shouldReceiveUpdate(percentage int, deviceHash string) bool {
 		return false
 	}
 
+	if len(deviceHash) < 8 {
+		deviceHash = utils.CalculateSHA256([]byte(deviceHash))
+	}
+
 	hashPrefix := deviceHash[:8]
-	val, _ := strconv.ParseUint(hashPrefix, 16, 32)
+	val, _ := strconv.ParseUint(hashPrefix, 16, 64)
 	return int(val%100) < percentage
 }
 

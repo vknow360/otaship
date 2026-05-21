@@ -44,17 +44,13 @@ func TestShouldReceiveUpdate(t *testing.T) {
 		{
 			name:       "Deterministic hash lower than threshold",
 			percentage: 50,
-			// Sum of ascii chars % 100
-			// 'a' = 97. 97*4 = 388. 388 % 100 = 88
-			// Wait, let's use a simpler one.
-			// Let's use a hash that sums to something easy.
-			deviceHash: string([]byte{10, 10, 10, 10}), // sum = 40. 40 % 100 = 40. 40 < 50 == true
+			deviceHash: "00000028", // hex for 40 -> 40 < 50 == true
 			expected:   true,
 		},
 		{
 			name:       "Deterministic hash higher than threshold",
 			percentage: 50,
-			deviceHash: string([]byte{20, 20, 20, 20}), // sum = 80. 80 % 100 = 80. 80 < 50 == false
+			deviceHash: "00000050", // hex for 80 -> 80 < 50 == false
 			expected:   false,
 		},
 	}
