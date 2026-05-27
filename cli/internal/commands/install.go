@@ -19,7 +19,6 @@ var InstallCmd = &cobra.Command{
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {
-	ui.PrintBanner()
 
 	execPath, err := os.Executable()
 	if err != nil {

@@ -171,7 +171,6 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no API key found. Run 'otaship link'")
 	}
 
-	ui.PrintBanner()
 	ui.Info.Printf("Publishing to: %s\n", project.Name)
 	ui.Info.Printf("Channel: %s\n", channel)
 

@@ -33,7 +33,6 @@ type GitHubAsset struct {
 }
 
 func runUpgrade(cmd *cobra.Command, args []string) error {
-	ui.PrintBanner()
 	ui.Info.Printf("Current version: %s\n", Version)
 
 	spinner, _ := ui.StartSpinner("Checking for updates...")

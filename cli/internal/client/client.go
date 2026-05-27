@@ -224,3 +224,32 @@ func (c *Client) RollbackUpdate(apiKey, updateID string) (*CreateUpdateResponse,
 	json.NewDecoder(resp.Body).Decode(&result)
 	return &result, nil
 }
+
+type RollbackToEmbeddedRequest struct {
+	Platform       string `json:"platform"`
+	RuntimeVersion string `json:"runtime_version"`
+	Channel        string `json:"channel"`
+}
+
+func (c *Client) RollbackToEmbedded(apiKey, projectID string, req *RollbackToEmbeddedRequest) (*CreateUpdateResponse, error) {
+	url := fmt.Sprintf("%s/api/project/%s/rollback-to-embedded", c.BaseURL, projectID)
+
+	body, _ := json.Marshal(req)
+	httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-API-Key", apiKey)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
+		return nil, utils.HandleHTTPError(resp)
+	}
+
+	var result CreateUpdateResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+	return &result, nil
+}

@@ -11,7 +11,7 @@ import (
 
 var RollbackCmd = &cobra.Command{
 	Use:   "rollback [update-id]",
-	Short: "Rollback to embedded update",
+	Short: "Republish a specific older update",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runRollback,
 }
@@ -44,6 +44,6 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	}
 
 	spinner.Success(fmt.Sprintf("Rollback created: %s", rollback.ID))
-	ui.Info.Println("Devices will revert to the built-in update on next check")
+	ui.Info.Println("This older update has been republished and is now active")
 	return nil
 }
