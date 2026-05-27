@@ -207,6 +207,7 @@ func projectRouter(db *pgxpool.Pool, queries *database.Queries, providers map[st
 	r.Get("/updates", handlers.ListProjectUpdates(queries))
 	r.Delete("/updates/{update_id}", handlers.DeleteProjectUpdate(queries, providers))
 	r.Post("/updates/{update_id}/rollback", handlers.CreateRollback(db, queries))
+	r.Post("/{project_id}/rollback-to-embedded", handlers.CreateRollbackToEmbedded(db, queries))
 	return r
 }
 
@@ -235,6 +236,7 @@ func adminRouter(db *pgxpool.Pool, queries *database.Queries, providers map[stri
 	r.Patch("/updates/{update_id}/rollout", handlers.UpdateRolloutPercentage(queries))
 	r.Delete("/updates/{update_id}", handlers.DeleteUpdate(queries, providers))
 	r.Post("/updates/{update_id}/rollback", handlers.CreateRollback(db, queries))
+	r.Post("/projects/{project_id}/rollback-to-embedded", handlers.CreateRollbackToEmbedded(db, queries))
 
 	r.Get("/settings", handlers.GetSettings(queries, providers))
 	r.Put("/settings", handlers.UpdateSetting(queries))

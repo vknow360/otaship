@@ -482,12 +482,23 @@ func CreateRollback(pool *pgxpool.Pool, queries *database.Queries) http.HandlerF
 			RolloutPercentage: 100,
 			Platform:          original.Platform,
 			IsActive:          true,
-			IsRollback:        true,
-			Message:           pgtype.Text{String: "Rollback from " + updateIdStr, Valid: true},
+			IsRollback:        false,
+			Message:           pgtype.Text{String: "Rollback to " + updateIdStr, Valid: true},
 		})
 		if err != nil {
 			jsonError(w, "Failed to create rollback", http.StatusInternalServerError)
 			return
+		}
+
+		if original.ExpoConfig != nil {
+			err = qtx.UpdateExpoConfig(r.Context(), database.UpdateExpoConfigParams{
+				ExpoConfig: original.ExpoConfig,
+				ID:         rollback.ID,
+			})
+			if err != nil {
+				jsonError(w, "Failed to clone expo config", http.StatusInternalServerError)
+				return
+			}
 		}
 
 		err = qtx.CloneAssets(r.Context(), database.CloneAssetsParams{
@@ -535,5 +546,85 @@ func GetUpdate(queries *database.Queries) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(toUpdateResponse(update, count))
+	}
+}
+
+type RollbackToEmbeddedRequest struct {
+	Platform       string `json:"platform"`
+	RuntimeVersion string `json:"runtime_version"`
+	Channel        string `json:"channel"`
+}
+
+func CreateRollbackToEmbedded(pool *pgxpool.Pool, queries *database.Queries) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req RollbackToEmbeddedRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			jsonError(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		projectIdStr := chi.URLParam(r, "project_id")
+		projectId, err := utils.ParseUUID(projectIdStr)
+		if err != nil {
+			jsonError(w, "Invalid project ID", http.StatusBadRequest)
+			return
+		}
+
+		if projectId != utils.GetProjectId(r.Context()) {
+			jsonError(w, "Project ID does not match the authenticated user", http.StatusForbidden)
+			return
+		}
+
+		if req.Platform == "" || req.RuntimeVersion == "" || req.Channel == "" {
+			jsonError(w, "Platform, runtime version, and channel are required", http.StatusBadRequest)
+			return
+		}
+
+		tx, err := pool.Begin(r.Context())
+		if err != nil {
+			jsonError(w, "Failed to start transaction", http.StatusInternalServerError)
+			return
+		}
+		defer tx.Rollback(r.Context())
+
+		qtx := queries.WithTx(tx)
+
+		err = qtx.DeactivateUpdates(r.Context(), database.DeactivateUpdatesParams{
+			ProjectID:      projectId,
+			Channel:        req.Channel,
+			RuntimeVersion: req.RuntimeVersion,
+			Platform:       req.Platform,
+		})
+		if err != nil {
+			jsonError(w, "Failed to deactivate updates", http.StatusInternalServerError)
+			return
+		}
+
+		rollback, err := qtx.CreateUpdate(r.Context(), database.CreateUpdateParams{
+			ProjectID:         projectId,
+			RuntimeVersion:    req.RuntimeVersion,
+			Channel:           req.Channel,
+			RolloutPercentage: 100,
+			Platform:          req.Platform,
+			IsActive:          true,
+			IsRollback:        true,
+			Message:           pgtype.Text{String: "Rollback to embedded", Valid: true},
+		})
+		if err != nil {
+			jsonError(w, "Failed to create rollback", http.StatusInternalServerError)
+			return
+		}
+
+		err = tx.Commit(r.Context())
+		if err != nil {
+			jsonError(w, "Failed to commit transaction", http.StatusInternalServerError)
+			return
+		}
+
+		go InvalidateManifestCache(projectId.String())
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(toUpdateResponse(rollback, 0))
 	}
 }
