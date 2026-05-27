@@ -126,15 +126,6 @@
 											<span class="text-neutral-400">Storage</span>
 											<span class="text-white">{stats.storage.usage_mb.toFixed(2)} MB</span>
 										</div>
-										<div class="h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-											<div
-												class="h-full bg-blue-500"
-												style="width: {Math.min(
-													100,
-													(stats.storage.usage_bytes / 100000000) * 100
-												)}%"
-											></div>
-										</div>
 									</div>
 
 									<div>
