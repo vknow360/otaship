@@ -2,7 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import { PUBLIC_API_URL } from '$env/static/public';
 
 export const actions = {
-	default: async ({ request, cookies }) => {
+	default: async ({ request, cookies, url }) => {
 		const data = await request.formData();
 		const token = data.get('token');
 		
@@ -17,11 +17,12 @@ export const actions = {
 				return { error: 'Invalid admin token' };
 			}
 			
+			const secure = url.protocol === 'https:';
 			cookies.set('otaship_token', token.toString(), {
 				path: '/',
 				maxAge: 86400,
 				httpOnly: true,
-				secure: true,
+				secure,
 				sameSite: 'strict'
 			});
 		} catch (err) {
