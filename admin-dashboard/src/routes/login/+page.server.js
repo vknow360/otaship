@@ -25,6 +25,7 @@ export const actions = {
 				sameSite: 'strict'
 			});
 		} catch (err) {
+			console.error('[Login Error] Failed to connect to backend at', API_BASE, ':', err);
 			return { error: 'Failed to connect to server' };
 		}
 		

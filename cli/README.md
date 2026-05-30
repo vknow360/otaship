@@ -1,53 +1,102 @@
-### Architecture and Functional Review: OTAShip CLI Tool
+# OTAShip CLI
 
-This review evaluates the architecture, implementation, and functionality of the OTAShip CLI tool, based on the codebase in `E:/otaship/cli`.
+The OTAShip CLI is a powerful command-line tool designed to help you publish, rollback, and manage Expo OTA updates on your self-hosted OTAShip server.
 
----
+## Installation
 
-### 1. Architecture Overview
-The CLI follows a standard Go project layout, promoting a clean separation of concerns.
+### From GitHub Releases (Recommended)
+Download the latest pre-compiled binary for your operating system from the [Releases page](https://github.com/vknow360/otaship/releases). Extract it and move the `otaship` binary into your system's `PATH`.
 
-*   **Entry Point (`cmd/otaship/main.go`):** Minimalist entry point that initializes the [Cobra](https://github.com/spf13/cobra) root command and adds subcommands. This is a best practice for Go CLI tools.
-*   **Command Logic (`internal/commands/`):** Each command (e.g., `init`, `publish`, `login`) is implemented in its own file. This improves maintainability and makes it easy to add new features.
-*   **Configuration (`internal/config/`):** Manages two types of configuration:
-    *   **Global (`~/.otaship/config.json`):** Stores server URL and a map of project slugs to API keys.
-    *   **Project (`otaship.json`):** Stores project-specific metadata like `projectId` and `channel`.
-*   **API Client (`internal/client/`):** Encapsulates HTTP interactions with the OTAShip backend. It uses simple `net/http` calls, which is appropriate for a tool of this size.
+### From Source
+If you have Go 1.25+ installed, you can compile and install it directly:
+```bash
+go install github.com/vknow360/otaship/cli/cmd/otaship@latest
+```
 
----
+### Upgrading
+To upgrade an existing installation to the latest version, simply run:
+```bash
+otaship upgrade
+```
 
-### 2. Functional Analysis
-The tool covers the essential lifecycle for managing OTA updates for Expo applications:
+## Getting Started
 
-| Command | Purpose | Review Notes |
-| :--- | :--- | :--- |
-| `login` | Configures the backend server URL. | Includes a health check (`/health`) before saving. |
-| `init` | Sets up a new project. | Validates the API key and creates the local `otaship.json`. |
-| `link` | Connects a project for team members. | Bridges the gap between local `otaship.json` and the user's global API keys. |
-| `status` | Displays project information. | Useful for troubleshooting (shows server, channel, and key status). |
-| `publish` | Orchestrates the update flow. | Automates: `expo export` → `zip` → `CreateUpdate` (API) → `UploadBundle` (API). |
-| `upgrade` | Self-updates the CLI. | Important for distributing bug fixes and new features. |
+Before managing updates, you need to authenticate the CLI with your OTAShip backend instance.
 
----
+1. **Log in to your server:**
+   ```bash
+   otaship login
+   # You will be prompted to enter your server URL (e.g., https://api.yourdomain.com)
+   ```
 
-### 3. Key Findings & Recommendations
+2. **Connect your Expo project:**
+   If you are the project creator setting up a new project:
+   ```bash
+   otaship init
+   # You will be prompted for the API Key provided by the Admin Dashboard
+   ```
+   
+   If you are a team member joining an existing project that already has an `otaship.json` file:
+   ```bash
+   otaship link
+   # You will be prompted for your API Key
+   ```
 
-#### ✅ Strengths
-*   **Cobra Usage:** Proper implementation of subcommands, flags, and error handling.
-*   **Atomic Config Writes:** `saveJSONAtomic` uses a temporary file and `os.Rename`, preventing configuration corruption during write failures.
-*   **Logical Workflow:** The separation of `init` (project owner) and `link` (team member) is well-conceived for collaborative environments.
+## Managing Updates
 
-#### ⚠️ Areas for Improvement
-*   **Testing:** There are currently no automated tests (e.g., `_test.go` files) for the config logic or the API client.
-    *   *Recommendation:* Add unit tests for `internal/config` using temporary directories for file operations.
-*   **Error Handling in API Client:** Some errors from `http.NewRequest` or `json.Marshal` are ignored using `_`.
-    *   *Recommendation:* Always check and return these errors to avoid silent failures.
-*   **Hardcoded Dependencies:** The `publish` command relies on the `npx expo export` command being available in the system path.
-    *   *Recommendation:* Add a pre-flight check to verify that `node` and `expo` are installed before starting the publish process.
-*   **Concurrency:** The `zipDistFolder` function processes files sequentially.
-    *   *Recommendation:* For very large Expo bundles, consider using a more optimized zipping library if performance becomes an issue.
-*   **API Key Storage:** API keys are stored in plain text in `~/.otaship/config.json`.
-    *   *Recommendation:* While common for developer tools, consider using a platform-specific keyring (e.g., `keytar` or `credential-helper` style) for sensitive keys in the future.
+### Publishing a New Update
+To bundle and publish your current Expo project code to OTAShip:
+```bash
+otaship publish
+```
+The CLI will interactively ask you for the platform (iOS/Android/All), release channel, rollout percentage, and an optional release message.
 
-### 4. Conclusion
-The OTAShip CLI is architecturally sound and functionally complete for its intended purpose. It follows Go idioms and provides a reliable workflow for Expo developers. The primary focus for future development should be adding automated tests and hardening error handling in the API communication layer.
+**Non-Interactive / CI Usage:**
+You can bypass prompts for use in CI/CD pipelines (like GitHub Actions):
+```bash
+otaship publish --platform android --channel production --rollout 25 --message "Fix login bug" --yes
+```
+
+**Skip Export:**
+If you have already run `npx expo export` manually, you can skip the export step:
+```bash
+otaship publish --skip-export
+```
+
+### Listing Updates
+View a history of all published updates for the current project:
+```bash
+otaship list
+```
+
+### Rolling Back
+If you published a broken update, you can instantly republish a previous known-good update using its ID:
+```bash
+otaship rollback <update-id>
+```
+
+### Factory Reset
+To force all devices on a specific platform/channel to clear their cached OTA updates and revert to the original binary built into the app stores:
+```bash
+otaship reset --platform android --channel production
+```
+
+### Deleting an Update
+Remove an update record entirely:
+```bash
+otaship delete <update-id>
+```
+
+## Other Commands
+
+- `otaship status`: Shows connection info and current project context.
+- `otaship doctor`: Validates your current setup and environment.
+- `otaship whoami`: Displays which project your API key is currently linked to.
+- `otaship version`: Prints the current CLI version.
+
+## Configuration Files
+
+The CLI maintains two types of configuration files:
+
+- **Global Config (`~/.otaship/config.json`)**: Stores your server URL and securely maps Project IDs to their respective API keys on your machine.
+- **Project Config (`./otaship.json`)**: Sits alongside your `app.json`. Stores non-sensitive project metadata like the `projectId` and default `channel`. This file should be checked into version control.

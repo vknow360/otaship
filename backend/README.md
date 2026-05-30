@@ -1,63 +1,66 @@
-### OTAShip Backend: Comprehensive Architectural and Functional Analysis
+# OTAShip Backend
 
-#### 🏗️ Architecture Overview
-The OTAShip backend is a high-performance **Go (1.25)** service designed to manage and serve **Expo OTA (Over-The-Air) updates**. It follows a standard clean architecture pattern with a clear separation between routing, business logic (handlers), and data persistence.
+The high-performance Go service that implements the Expo Updates protocol, manages OTA updates, and powers the Admin Dashboard.
 
--   **Web Framework**: `chi/v5` for lightweight, idiomatic routing and middleware support.
--   **Database**: **PostgreSQL** with `pgxpool` for connection pooling.
--   **Data Mapping**: `sqlc` is used to generate type-safe Go code from raw SQL queries, ensuring performance and reliability.
--   **Asset Storage**: **Cloudinary** integration for storing and serving update bundles (JS bundles and assets).
--   **Authentication**: Custom API key-based authentication for CLI/Admin tools, using **bcrypt** for hashing.
+## Prerequisites
 
----
+To run or build the backend, you need:
+- Go 1.25+
+- PostgreSQL 16+
+- Storage provider account (Cloudinary or AWS S3/MinIO)
 
-#### 🛠️ Functional Features
+## Configuration
 
-##### 1. Expo Manifest API (`/api/manifest/{projectId}`)
-This is the core of the OTA update system. It implements the **Expo Manifest Protocol (v1)**:
--   **Protocol Support**: Handles both legacy (v0) and modern (v1) Expo protocols using `multipart/mixed` responses.
--   **Smart Filtering**: Delivers the latest active update based on `runtime-version`, `platform` (iOS/Android), and `channel` (production/staging/beta).
--   **Rollout Control**: Supports partial rollouts via a `rollout_percentage` check before serving updates.
--   **Optimized Delivery**: Uses ETag-like checks via `expo-current-update-id` to prevent redundant downloads.
+The backend relies on environment variables. Copy `.env.example` to `.env` and configure the following variables:
 
-##### 2. Project & Update Management
--   **Project Scoping**: Multi-tenant design where updates and assets are scoped to specific projects.
--   **Lifecycle Management**:
-    -   `CreateProject`: Generates unique slugs and secure API keys.
-    -   `CreateUpdate`: Automatically deactivates older updates in the same channel/platform when a new one is published.
-    -   `Rollback Support`: Database schema includes `is_rollback` flag for quick version reversion.
-    -   `Rollout Adjustments`: Allows dynamic patching of rollout percentages for staged releases.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | **Yes** | PostgreSQL connection string (e.g., `postgresql://user:pass@host:5432/dbname?sslmode=disable`) |
+| `ADMIN_TOKEN_HASH` | **Yes** | A bcrypt hash of the secret token used to log into the Admin Dashboard |
+| `CLOUDINARY_*` | One of | `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_CLOUD_NAME` (if using Cloudinary) |
+| `S3_*` | One of | `S3_ACCESS_KEY`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`, `S3_BUCKET_NAME` (if using S3) |
+| `PORT` | No | Port to run the server on (default: `8080`) |
+| `ALLOWED_ORIGINS` | No | CORS allowed origins (default: `*`) |
 
-##### 3. Asset & Bundle Processing
--   **ZIP Handling**: Backend accepts `.zip` bundles from the CLI, extracts them, and parses `metadata.json` to identify platform-specific assets.
--   **Integrity Verification**: Calculates **SHA256** hashes for every file to ensure bundle integrity during client downloads.
--   **MIME Inference**: Intelligently detects content types for JS bundles (`.hbc`, `.js`) and assets.
+> **Pro-Tip for `ADMIN_TOKEN_HASH`:** 
+> You can generate a bcrypt hash for your chosen password using any online bcrypt generator or CLI tool.
 
----
+## Running Locally
 
-#### 🚧 Remaining & Expected Features
+1. Start your local PostgreSQL instance and create the `otaship` database.
+2. Ensure your `.env` file is fully configured.
+3. Start the server:
+   ```bash
+   go run ./cmd/server
+   ```
+   *(The server will automatically execute database migrations on startup via the `golang-migrate` library.)*
 
--   **Analytics Ingestion**: The database supports `download_events` (tracking unique devices, platforms, and channels), but there is currently no public API endpoint to receive these events from the Expo client.
--   **Advanced Key Management**: While a dedicated `api_keys` table exists, the logic for managing multiple keys per project in `apikeys.go` is currently commented out and non-functional.
--   **Security Hardening**: The `AdminOnly` middleware is a placeholder that allows all requests. Implementing a real authentication layer (like JWT or Session-based) is a pending requirement.
--   **Automated Asset Cleanup**: When a project or update is deleted from the database, the corresponding files remain in Cloudinary storage. A background worker or hook for storage cleanup is missing.
+## Running with Docker
 
----
+From the root of the repository, you can run the entire backend and database stack using Docker Compose:
 
-#### 🐛 Potential Bugs & Improvements
+```bash
+docker-compose up -d
+```
 
--   **Silent UUID Failures**: In `CheckForUpdates`, UUID parsing errors are ignored (`_`), which could cause the backend to search for updates using a zero-UUID (`00000000-0000-0000-0000-000000000000`) instead of returning a `400 Bad Request`.
--   **Context Handling**: Background goroutines (e.g., updating `last_used_at` for API keys) use `context.Background()` instead of a derived context, making them harder to trace or cancel during server shutdown.
--   **Asset Type Detection**: The backend relies on `http.DetectContentType` and manual extension checks. For Hermes bytecode (`.hbc`), it might benefit from more robust validation to ensure clients receive the correct binary format.
+## API Overview
 
----
+The backend exposes several sets of REST endpoints utilizing the `go-chi` router:
 
-#### 🚀 Key Technologies
-| Component | Technology |
-| :--- | :--- |
-| **Language** | Go 1.25 |
-| **Router** | go-chi/chi |
-| **ORM/SQL** | sqlc |
-| **Driver** | jackc/pgx/v5 |
-| **Storage** | Cloudinary |
-| **Crypto** | golang.org/x/crypto/bcrypt |
+- **Expo Client API (`/api/manifest/{project_id}`)**: Handles device requests for updates, serving standard or multipart Expo manifests based on the client protocol version.
+- **Project API (`/api/project/*`)**: Endpoints used by the OTAShip CLI to publish updates, upload asset bundles, and manage project metadata. Secured via per-project API keys.
+- **Admin API (`/api/admin/*`)**: Endpoints used by the Admin Dashboard to manage all projects, view analytics, and control storage configurations. Secured via the `ADMIN_TOKEN_HASH`.
+- **Validation**: `/api/validate-key` and `/api/project/me` for CLI authentication.
+
+## Key Design Decisions
+
+- **SQLC**: Generates type-safe Go code directly from SQL queries for performance and compile-time safety.
+- **Smart Protocol Negotiation**: Can serve both standard JSON (Protocol 0) and `multipart/mixed` (Protocol 1) manifests depending on what the Expo client supports.
+- **Asset Hashing**: Computes SHA-256 hashes of all JS bundles and assets uploaded via the CLI to ensure integrity on the client side.
+- **ETag Caching**: Heavily caches manifests and respects `expo-current-update-id` headers to return `304 Not Modified`, saving massive amounts of bandwidth.
+
+## Known Limitations
+
+- **Analytics Ingestion**: While the database supports `download_events` for tracking unique devices, the public endpoint for clients to report successful downloads is currently not implemented.
+- **Multi-Key Management**: The database schema supports multiple API keys per project, but the current API implementation only actively manages one primary key per project.
+- **Storage Cleanup**: Deleting an update from the database does not currently trigger a background job to delete the corresponding assets from S3 or Cloudinary.

@@ -1,41 +1,111 @@
-# OTAShip
+<p align="center">
+  <img src="./admin-dashboard/static/favicon.png" alt="OTAShip Logo" width="120" />
+</p>
 
-OTAShip is an open-source, self-hostable alternative to EAS Updates. It provides a full implementation of the Expo Updates protocol, allowing developers to deploy over-the-air (OTA) updates to React Native applications without relying on third-party cloud services.
+<h1 align="center">OTAShip</h1>
 
-The system is designed for high performance and data integrity, utilizing a Go-based backend and PostgreSQL for metadata management.
+<p align="center">
+  <strong>The open-source, self-hosted alternative to EAS Updates.</strong><br>
+  Own your over-the-air (OTA) updates for Expo and React Native applications.
+</p>
 
-## Project Structure
+<p align="center">
+  <a href="https://github.com/vknow360/otaship/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
+  </a>
+  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go Version">
+  <img src="https://img.shields.io/badge/PostgreSQL-16+-336791?logo=postgresql" alt="Postgres Version">
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
+</p>
 
-The repository is organized into four main components:
+---
 
-*   **backend/**: A Go service built with the Chi router and SQLC. It handles manifest generation, asset management, and project coordination.
-*   **cli/**: A Cobra-based command-line interface for managing projects, zipping assets, and publishing updates.
-*   **admin-dashboard/**: A SvelteKit application for visualizing release history, managing API keys, and monitoring storage usage.
-*   **expo-client/**: A reference implementation showing how to integrate the Expo Updates client with an OTAShip instance.
+## 🚀 What is OTAShip?
 
-## Core Features
+OTAShip is a fully self-hostable service that implements the Expo Updates protocol. It allows you to deliver over-the-air (OTA) updates to your React Native applications instantly, without relying on or paying for third-party cloud services like EAS. 
 
-*   **Native Protocol Support**: Full compatibility with the modern Expo Updates protocol (multipart/mixed manifest support).
-*   **Storage Abstraction**: Support for multiple storage providers including Cloudinary and AWS S3 via a unified provider interface.
-*   **Security**: Per-project API key authentication and support for RSA manifest signing.
-*   **Database Reliability**: Relational data integrity using PostgreSQL with automated migrations.
-*   **Detailed Analytics**: Event-sourced download tracking and storage usage monitoring.
+With OTAShip, you retain complete control over your update infrastructure, deployment speed, and data privacy.
 
-## Getting Started
+## ✨ Key Features
 
-Refer to the individual README files in each directory for specific setup instructions:
+- **True Self-Hosting:** Deploy anywhere using Docker, Kubernetes, or bare metal. No vendor lock-in.
+- **Expo Protocol Compatibility:** Full support for the modern Expo Updates protocol (multipart/mixed manifest support).
+- **Flexible Storage:** Store your JS bundles and assets on AWS S3, MinIO, or Cloudinary.
+- **Gradual Rollouts & Rollbacks:** Control update rollout percentages (e.g., release to 10% of users) and instantly rollback broken updates.
+- **Admin Dashboard:** A beautiful SvelteKit-powered web interface to manage projects, API keys, and monitor update history.
+- **CI/CD Ready CLI:** A powerful Go-based CLI to publish updates directly from GitHub Actions or your local machine.
+- **Security First:** Per-project API keys and support for RSA manifest code signing.
 
-1.  **Backend Setup**: Configure your PostgreSQL database and environment variables in the `backend/` directory.
-2.  **CLI Configuration**: Install the OTAShip CLI to manage your projects and publish releases.
-3.  **Dashboard Deployment**: Deploy the SvelteKit dashboard to manage your OTAShip instance through a web interface.
+---
 
-## Technical Architecture
+## 📸 Dashboard Screenshots
 
-*   **Language**: Go (Backend/CLI), JavaScript/Svelte (Dashboard)
-*   **Database**: PostgreSQL 16+
-*   **Router**: Chi (Backend)
-*   **Client Communication**: Expo Updates Protocol 0/1
+| Projects Overview | Project Details & Rollbacks |
+|:---:|:---:|
+| <img src="./.github/assets/dashboard_overview_1779900735585.png" alt="Dashboard Overview" width="400"/> | <img src="./.github/assets/project_detail_1779900890841.png" alt="Project Details" width="400"/> |
 
-## License
+---
 
-This project is licensed under the Apache License 2.0. See the LICENSE file for details.
+## ⚡ Quick Start
+
+### Prerequisites
+- Docker and Docker Compose
+- (For manual setup: Go 1.25+, PostgreSQL 16+, Node.js 18+)
+
+### Using Docker Compose
+
+Get the backend and database running in minutes:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/vknow360/otaship.git
+   cd otaship
+   ```
+
+2. Configure environment variables for the backend:
+   ```bash
+   cp backend/.env.example backend/.env
+   # Edit backend/.env to add your Cloudinary/S3 keys and set ADMIN_TOKEN_HASH
+   ```
+
+3. Start the services:
+   ```bash
+   docker-compose up -d
+   ```
+   *The backend will automatically run database migrations and start on `localhost:8080`.*
+
+### Manual Setup & Specific Guides
+
+For detailed setup instructions for each component, check their respective guides:
+
+| Component | Description | Guide |
+|-----------|-------------|-------|
+| **Backend** | The core Go API and manifest server | [Backend Guide](./backend/README.md) |
+| **CLI** | The `otaship` command-line tool for publishing | [CLI Guide](./cli/README.md) |
+| **Admin Dashboard** | SvelteKit web interface for management | [Dashboard Guide](./admin-dashboard/README.md) |
+| **Expo Client** | Example React Native app integration | [Client Guide](./expo-client/README.md) |
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    CLI[OTAShip CLI (Publish)] -->|Uploads Bundle| Backend[Go Backend API]
+    Dashboard[Admin Dashboard] <-->|Manages Projects/Keys| Backend
+    Backend -->|Stores Metadata| Postgres[(PostgreSQL)]
+    Backend -->|Stores Assets| Storage[(AWS S3 / Cloudinary)]
+    App[React Native App] -->|Requests Update| Backend
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are always welcome! Whether it's reporting a bug, discussing improvements, or submitting a pull request, we appreciate your help in making OTAShip better.
+
+---
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](./LICENSE) file for details.

@@ -28,6 +28,6 @@
 
 	<div class="space-y-10">
 		<StatsGrid stats={data.stats} />
-		<RecentUpdates updates={data.updates.updates} showControls={false} />
+		<RecentUpdates updates={data.updates?.updates || []} showControls={false} />
 	</div>
 </div>

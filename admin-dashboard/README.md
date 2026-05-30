@@ -1,42 +1,68 @@
-# sv
+# OTAShip Admin Dashboard
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A beautiful, responsive web interface for managing your self-hosted OTAShip instance. Built with SvelteKit, this dashboard provides complete visibility and control over your OTA update pipeline.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+- **Project Management:** Create new projects and manage existing ones.
+- **Update History:** View a timeline of all published updates per project, including channels, platforms, and release dates.
+- **Access Control:** Generate, view, and revoke API keys used by the OTAShip CLI.
+- **Rollbacks:** Instantly revert broken releases directly from the web interface.
+- **Monitoring:** View configuration details, update metadata, and storage backend settings.
 
-```sh
-# create a new project
-npx sv create my-app
+## Prerequisites
+
+- Node.js 18 or higher
+- `npm` or `pnpm` (pnpm is recommended)
+- A running instance of the OTAShip backend
+
+## Setup
+
+### 1. Environment Variables
+
+Create a `.env` file in the root of the `admin-dashboard` directory by copying the example file:
+
+```bash
+cp .env.example .env
 ```
 
-To recreate this project with the same configuration:
+Configure the connection to your OTAShip backend:
 
-```sh
-# recreate this project
-pnpm dlx sv@0.15.3 create --template minimal --no-types --add eslint prettier tailwindcss="plugins:typography" --install pnpm admin-dashboard-svelte
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PUBLIC_API_URL` | The base URL of your OTAShip backend API | `http://localhost:8080` |
+
+### 2. Installation
+
+Install the dependencies:
+
+```bash
+npm install
+# or
+pnpm install
 ```
 
-## Developing
+### 3. Development Server
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Start the local development server:
 
-```sh
+```bash
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+# or
+pnpm dev
 ```
+The dashboard will be available at `http://localhost:5173`. 
 
-## Building
+To log in, use the plaintext password that corresponds to the `ADMIN_TOKEN_HASH` you configured in your backend's environment variables.
 
-To create a production version of your app:
+## Building for Production
 
-```sh
+To create an optimized production build of the dashboard:
+
+```bash
 npm run build
 ```
 
-You can preview the production build with `npm run preview`.
+By default, the dashboard uses SvelteKit's `adapter-auto`. If you are deploying to a specific environment (like Node.js, Vercel, or Cloudflare Pages), you may need to install the corresponding SvelteKit adapter and update your `svelte.config.js`. 
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+For example, to run the dashboard as a standalone Node.js server, switch to `@sveltejs/adapter-node`.

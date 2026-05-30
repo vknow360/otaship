@@ -42,7 +42,7 @@ The key configuration is in `app.json`:
     "slug": "expo-client",
     "runtimeVersion": "2",
     "updates": {
-      "url": "https://your-server.com/api/expo-client/manifest",
+      "url": "https://your-server.com/api/manifest/your-project-slug",
       "enabled": true,
       "checkAutomatically": "ON_LOAD"
     }
@@ -94,6 +94,3 @@ expo-client/
 └── package.json        # Dependencies
 ```
 
-## License
-
-MIT
