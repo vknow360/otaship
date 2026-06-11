@@ -20,8 +20,8 @@ services:
     build:
       context: ./backend
     container_name: otaship_server
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -43,12 +43,23 @@ services:
     container_name: otaship_dashboard
     env_file:
       - ./admin-dashboard/.env
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
+    networks:
+      - otaship_network
+
+  nginx:
+    build: ./nginx
+    container_name: otaship_nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+      - dashboard
     networks:
       - otaship_network
 
