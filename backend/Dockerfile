@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 go build -o server ./cmd/server
 
 FROM alpine:3.24
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates curl
 
 WORKDIR /app
 
