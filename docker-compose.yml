@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:alpine
+    container_name: otaship_db
+    networks:
+      - otaship_network
+    volumes:
+      - otaship_volume:/var/lib/postgresql/data
+    env_file:
+      - ./postgres/.env
+    restart: always
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "myuser", "-d" , "otaship"]
+      interval: 10s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: otaship_server
+    ports:
+      - "8080:8080"
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - otaship_network
+    env_file:
+      - ./backend/.env
+
+  dashboard:
+    build:
+      context: ./admin-dashboard
+    container_name: otaship_dashboard
+    env_file:
+      - ./admin-dashboard/.env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - otaship_network
+
+networks:
+  otaship_network:
+
+volumes:
+  otaship_volume:
+      
