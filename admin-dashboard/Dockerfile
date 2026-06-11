@@ -7,6 +7,8 @@ RUN npm i
 
 COPY . .
 
+RUN apk add --no-cache ca-certificates curl
+
 RUN npm run build
 
 FROM node:24-alpine AS runner
