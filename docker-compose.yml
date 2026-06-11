@@ -11,7 +11,7 @@ services:
     restart: always
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "myuser", "-d" , "otaship"]
-      interval: 10s
+      interval: 1m
       timeout: 30s
       retries: 5
       start_period: 30s
@@ -57,9 +57,12 @@ services:
     container_name: otaship_nginx
     ports:
       - "80:80"
+    restart: always
     depends_on:
-      - backend
-      - dashboard
+      backend:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
     networks:
       - otaship_network
 
