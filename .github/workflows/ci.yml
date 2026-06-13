@@ -11,64 +11,62 @@ jobs:
     name: Build & Test All
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.25.x'
-        cache-dependency-path: |
-          backend/go.sum
-          cli/go.sum
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: |
+            backend/go.sum
+            cli/go.sum
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: admin-dashboard/package-lock.json
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
 
-    - name: Backend - Download deps
-      working-directory: ./backend
-      run: go mod download
+      - name: Backend - Download deps
+        working-directory: ./backend
+        run: go mod download
 
-    - name: Backend - Vet
-      working-directory: ./backend
-      run: go vet ./...
+      - name: Backend - Vet
+        working-directory: ./backend
+        run: go vet ./...
 
-    - name: Backend - Test
-      working-directory: ./backend
-      run: go test -v -race ./...
+      - name: Backend - Test
+        working-directory: ./backend
+        run: go test -v -race ./...
 
-    - name: Backend - Build
-      working-directory: ./backend
-      run: go build -v ./cmd/server
+      - name: Backend - Build
+        working-directory: ./backend
+        run: go build -v ./cmd/server
 
-    - name: CLI - Download deps
-      working-directory: ./cli
-      run: go mod download
+      - name: CLI - Download deps
+        working-directory: ./cli
+        run: go mod download
 
-    - name: CLI - Vet
-      working-directory: ./cli
-      run: go vet ./...
+      - name: CLI - Vet
+        working-directory: ./cli
+        run: go vet ./...
 
-    - name: CLI - Test
-      working-directory: ./cli
-      run: go test -v -race ./...
+      - name: CLI - Test
+        working-directory: ./cli
+        run: go test -v -race ./...
 
-    - name: CLI - Build
-      working-directory: ./cli
-      run: go build -v ./cmd/otaship
+      - name: CLI - Build
+        working-directory: ./cli
+        run: go build -v ./cmd/otaship
 
-    - name: Dashboard - Install deps
-      working-directory: ./admin-dashboard
-      run: npm ci
+      - name: Dashboard - Install deps
+        working-directory: ./admin-dashboard
+        run: npm install
 
-    - name: Dashboard - Lint
-      working-directory: ./admin-dashboard
-      run: npm run lint
+      - name: Dashboard - Lint
+        working-directory: ./admin-dashboard
+        run: npm run lint
 
-    - name: Dashboard - Build
-      working-directory: ./admin-dashboard
-      run: npm run build
+      - name: Dashboard - Build
+        working-directory: ./admin-dashboard
+        run: npm run build
