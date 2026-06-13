@@ -11,10 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/vknow360/otaship/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/vknow360/otaship/ci.yml?branch=dev&label=CI&logo=github" alt="CI">
-  </a>
-  <a href="https://github.com/vknow360/otaship/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
+    <img src="https://img.shields.io/github/actions/workflow/status/vknow360/otaship/ci.yml?branch=dev&label=Build&logo=github" alt="Build">
   </a>
   <img src="https://img.shields.io/badge/version-v0.2.0-green" alt="Version">
   <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go">

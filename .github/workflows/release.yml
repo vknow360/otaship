@@ -6,11 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  ci:
-    uses: ./.github/workflows/ci.yml
-
   release-cli:
-    needs: [ci]
     name: Build & Release CLI
     runs-on: ubuntu-latest
     permissions:
@@ -59,7 +55,6 @@ jobs:
           generate_release_notes: true
 
   release-docker:
-    needs: [ci]
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
     permissions:
@@ -116,6 +111,7 @@ jobs:
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
+          provenance: false
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             BUILD_DATE=${{ steps.date.outputs.date }}
@@ -129,5 +125,6 @@ jobs:
           push: true
           tags: ${{ steps.meta-dashboard.outputs.tags }}
           labels: ${{ steps.meta-dashboard.outputs.labels }}
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
