@@ -8,7 +8,9 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o server ./cmd/server
+ARG VERSION=0.2.0-dev
+ARG BUILD_DATE=development
+RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE}" -o server ./cmd/server
 
 FROM alpine:3.24
 

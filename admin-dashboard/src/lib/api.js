@@ -1,8 +1,11 @@
-import { PUBLIC_API_URL } from '$env/static/public';
-const API_BASE = PUBLIC_API_URL || 'http://localhost:8080';
+import { env } from '$env/dynamic/public';
+
+function getApiBase() {
+	return env.PUBLIC_API_URL || 'http://localhost:8080';
+}
 
 export async function apiGet(path, token) {
-	const res = await fetch(`${API_BASE}/${path}`, {
+	const res = await fetch(`${getApiBase()}/${path}`, {
 		headers: {
 			'Content-Type': 'application/json',
 			Authorization: `Bearer ${token}`
@@ -14,7 +17,7 @@ export async function apiGet(path, token) {
 }
 
 export async function apiPost(path, data, token) {
-	const res = await fetch(`${API_BASE}/${path}`, {
+	const res = await fetch(`${getApiBase()}/${path}`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
@@ -31,7 +34,7 @@ export async function apiPost(path, data, token) {
 }
 
 export async function apiDelete(path, token) {
-	const res = await fetch(`${API_BASE}/${path}`, {
+	const res = await fetch(`${getApiBase()}/${path}`, {
 		method: 'DELETE',
 		headers: {
 			'Content-Type': 'application/json',
@@ -45,7 +48,7 @@ export async function apiDelete(path, token) {
 }
 
 export async function apiPut(path, data, token) {
-	const res = await fetch(`${API_BASE}/${path}`, {
+	const res = await fetch(`${getApiBase()}/${path}`, {
 		method: 'PUT',
 		headers: {
 			'Content-Type': 'application/json',

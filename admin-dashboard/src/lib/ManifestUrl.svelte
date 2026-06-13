@@ -1,9 +1,11 @@
 <script>
 	let { projectId } = $props();
-	import { PUBLIC_API_URL } from '$env/static/public';
+	import { env } from '$env/dynamic/public';
 
 	function copy() {
-		navigator.clipboard.writeText(`${PUBLIC_API_URL}/api/manifest/${projectId}`);
+		navigator.clipboard.writeText(
+			`${env.PUBLIC_API_URL || 'http://localhost:8080'}/api/manifest/${projectId}`
+		);
 	}
 </script>
 
@@ -14,7 +16,7 @@
 		class="mt-4 flex items-center justify-between gap-3 rounded-lg border border-neutral-800 bg-black px-3 py-2"
 	>
 		<code class="text-xs text-neutral-400" id="manifest-url"
-			>{PUBLIC_API_URL}/api/manifest/{projectId}</code
+			>{env.PUBLIC_API_URL || 'http://localhost:8080'}/api/manifest/{projectId}</code
 		>
 		<button class="text-neutral-500 hover:text-white" onclick={copy} title="Copy">
 			<svg

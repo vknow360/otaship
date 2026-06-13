@@ -17,7 +17,8 @@ services:
       start_period: 30s
 
   backend:
-    image: ghcr.io/vknow360/otaship-backend:latest
+    build:
+      context: ./backend
     container_name: otaship_server
     ports:
       - "8080:8080"
@@ -37,7 +38,8 @@ services:
       - ./backend/.env
 
   dashboard:
-    image: ghcr.io/vknow360/otaship-dashboard:latest
+    build:
+      context: ./admin-dashboard
     container_name: otaship_dashboard
     env_file:
       - ./admin-dashboard/.env

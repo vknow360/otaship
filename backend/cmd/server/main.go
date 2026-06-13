@@ -31,8 +31,8 @@ import (
 
 var (
 	accessToken string
-	Version     = "dev"
-	BuildDate   = "unknown"
+	Version     = "0.2.0-dev"
+	BuildDate   = "development"
 )
 
 func main() {

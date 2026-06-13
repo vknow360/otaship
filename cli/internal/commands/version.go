@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	Version   = "dev"
-	BuildDate = "unknown"
+	Version   = "0.2.0-dev"
+	BuildDate = "development"
 )
 
 var VersionCmd = &cobra.Command{
