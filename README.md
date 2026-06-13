@@ -5,107 +5,116 @@
 <h1 align="center">OTAShip</h1>
 
 <p align="center">
-  <strong>The open-source, self-hosted alternative to EAS Updates.</strong><br>
-  Own your over-the-air (OTA) updates for Expo and React Native applications.
+  <strong>Self-hosted over-the-air updates for Expo & React Native.</strong><br>
+  A free, open-source alternative to EAS Updates — own your update infrastructure.
 </p>
 
 <p align="center">
+  <a href="https://github.com/vknow360/otaship/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/vknow360/otaship/ci.yml?branch=main&label=CI&logo=github" alt="CI">
+  </a>
   <a href="https://github.com/vknow360/otaship/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
   </a>
-  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go Version">
-  <img src="https://img.shields.io/badge/PostgreSQL-16+-336791?logo=postgresql" alt="Postgres Version">
+  <img src="https://img.shields.io/badge/version-v0.2.0-green" alt="Version">
+  <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go">
+  <img src="https://img.shields.io/badge/SvelteKit-2-FF3E00?logo=svelte&logoColor=white" alt="SvelteKit">
+  <img src="https://img.shields.io/badge/PostgreSQL-16+-336791?logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
 </p>
 
 ---
 
-## 🚀 What is OTAShip?
+## What is OTAShip?
 
-OTAShip is a fully self-hostable service that implements the Expo Updates protocol. It allows you to deliver over-the-air (OTA) updates to your React Native applications instantly, without relying on or paying for third-party cloud services like EAS. 
+OTAShip lets you push JavaScript updates directly to your Expo / React Native apps without going through app store review. It implements the [Expo Updates protocol](https://docs.expo.dev/technical-specs/expo-updates-1/), so `expo-updates` works out of the box — just point it at your own server instead of Expo's.
 
-With OTAShip, you retain complete control over your update infrastructure, deployment speed, and data privacy.
+You get a **Go backend**, a **SvelteKit admin dashboard**, a **CLI for publishing**, and an **example Expo client** — all wired together with Docker Compose.
 
-## ✨ Key Features
+## Why Self-Host?
 
-- **True Self-Hosting:** Deploy anywhere using Docker, Kubernetes, or bare metal. No vendor lock-in.
-- **Expo Protocol Compatibility:** Full support for the modern Expo Updates protocol (multipart/mixed manifest support).
-- **Flexible Storage:** Store your JS bundles and assets on AWS S3, MinIO, or Cloudinary.
-- **Gradual Rollouts & Rollbacks:** Control update rollout percentages (e.g., release to 10% of users) and instantly rollback broken updates.
-- **Admin Dashboard:** A beautiful SvelteKit-powered web interface to manage projects, API keys, and monitor update history.
-- **CI/CD Ready CLI:** A powerful Go-based CLI to publish updates directly from GitHub Actions or your local machine.
-- **Security First:** Per-project API keys and support for RSA manifest code signing.
+- **Your data, your server.** Update bundles and metadata stay on infrastructure you control.
+- **No usage caps.** No per-update pricing, no monthly limits. Push as many updates as you want.
+- **Percentage-based rollouts.** Ship to 10% of users first, then ramp up — included, not paywalled.
+- **Rollbacks without republishing.** Revert to any previous update or the embedded binary in one command.
 
----
+## Features
 
-## 📸 Dashboard Screenshots
+| Category | What you get |
+|----------|-------------|
+| **Protocol** | Full Expo Updates manifest protocol, including multipart responses and code signing |
+| **Storage** | Pluggable: AWS S3, MinIO, or Cloudinary — switch via dashboard settings |
+| **Rollouts** | Percentage-based rollouts with per-update control |
+| **Rollbacks** | Rollback to any previous update or factory-reset to embedded binary |
+| **Dashboard** | Real-time overview, project management, API key management, storage usage |
+| **CLI** | `otaship publish` — bundles, uploads, and tracks updates from your terminal or CI/CD |
+| **API** | RESTful API with interactive Swagger docs at `/api/docs` |
+| **Auth** | Admin bearer tokens for dashboard, scoped `X-API-Key` tokens for CLI/projects |
+| **Observability** | Structured logging (JSON/text), download tracking, per-project stats |
 
-| Projects Overview | Project Details & Rollbacks |
-|:---:|:---:|
-| <img src="./.github/assets/dashboard_overview_1779900735585.png" alt="Dashboard Overview" width="400"/> | <img src="./.github/assets/project_detail_1779900890841.png" alt="Project Details" width="400"/> |
+## Quick Start
 
----
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and Docker Compose
 
-## ⚡ Quick Start
+```bash
+# Clone the repo
+git clone https://github.com/vknow360/otaship.git && cd otaship
 
-### Prerequisites
-- Docker and Docker Compose
-- (For manual setup: Go 1.25+, PostgreSQL 16+, Node.js 18+)
+# Copy environment files
+cp backend/.env.example backend/.env
+cp admin-dashboard/.env.example admin-dashboard/.env
+cp postgres/.env.example postgres/.env
 
-### Using Docker Compose
+# Start everything
+docker compose up -d
+```
 
-Get the backend and database running in minutes:
+That's it. The **API** is at `http://localhost:8080` and the **dashboard** at `http://localhost:3000`.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/vknow360/otaship.git
-   cd otaship
-   ```
+> **Next steps:** Generate an admin token hash, configure your storage provider (S3 or Cloudinary), and create your first project through the dashboard. See the [Backend README](./backend/README.md) for environment variable details.
 
-2. Configure environment variables for the backend:
-   ```bash
-   cp backend/.env.example backend/.env
-   # Edit backend/.env to add your Cloudinary/S3 keys and set ADMIN_TOKEN_HASH
-   ```
+## OTAShip vs EAS Updates
 
-3. Start the services:
-   ```bash
-   docker-compose up -d
-   ```
-   *The backend will automatically run database migrations and start on `localhost:8080`.*
+| | **OTAShip** | **EAS Updates** |
+|---|---|---|
+| **Hosting** | Self-hosted — your servers | Expo Cloud |
+| **Pricing** | Free, forever | Free tier with limits, paid plans |
+| **Data storage** | Your PostgreSQL + your S3/Cloudinary | Expo-managed |
+| **Rollouts** | Percentage-based, included | Paid tier feature |
+| **Rollbacks** | One-command via CLI or dashboard | Manual republish |
+| **Code signing** | RSA manifest signing | Supported |
+| **Vendor lock-in** | None — standard Expo Updates protocol | Expo ecosystem |
 
-### Manual Setup & Specific Guides
-
-For detailed setup instructions for each component, check their respective guides:
-
-| Component | Description | Guide |
-|-----------|-------------|-------|
-| **Backend** | The core Go API and manifest server | [Backend Guide](./backend/README.md) |
-| **CLI** | The `otaship` command-line tool for publishing | [CLI Guide](./cli/README.md) |
-| **Admin Dashboard** | SvelteKit web interface for management | [Dashboard Guide](./admin-dashboard/README.md) |
-| **Expo Client** | Example React Native app integration | [Client Guide](./expo-client/README.md) |
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph TD
-    CLI[OTAShip CLI (Publish)] -->|Uploads Bundle| Backend[Go Backend API]
-    Dashboard[Admin Dashboard] <-->|Manages Projects/Keys| Backend
-    Backend -->|Stores Metadata| Postgres[(PostgreSQL)]
-    Backend -->|Stores Assets| Storage[(AWS S3 / Cloudinary)]
-    App[React Native App] -->|Requests Update| Backend
+    CLI["otaship CLI"] -->|Publishes bundle| Backend["Go API :8080"]
+    Dashboard["Admin Dashboard :3000"] <-->|Manages config| Backend
+    Backend -->|Stores metadata| Postgres[("PostgreSQL")]
+    Backend -->|Uploads assets| Storage[("S3 / Cloudinary")]
+    App["Expo App"] -->|Requests manifest| Backend
+    Backend -->|Serves update| App
 ```
 
----
+## Project Structure
 
-## 🤝 Contributing
+This is a monorepo with four components:
 
-Contributions are always welcome! Whether it's reporting a bug, discussing improvements, or submitting a pull request, we appreciate your help in making OTAShip better.
+| Component | Stack | Description | Docs |
+|-----------|-------|-------------|------|
+| [`backend`](./backend) | Go, Chi, PostgreSQL, SQLC | API server — manifests, uploads, rollouts | [README](./backend/README.md) |
+| [`admin-dashboard`](./admin-dashboard) | SvelteKit, Tailwind CSS | Web UI for managing projects and updates | [README](./admin-dashboard/README.md) |
+| [`cli`](./cli) | Go, Cobra | Publish updates from terminal or CI/CD | [README](./cli/README.md) |
+| [`expo-client`](./expo-client) | Expo, React Native | Example app showing OTA integration | [README](./expo-client/README.md) |
 
----
+## Contributing
 
-## 📄 License
+Contributions are welcome! Whether it's a bug fix, a new feature, or documentation improvements — feel free to open an issue or submit a pull request.
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](./LICENSE) file for details.
+If you found OTAShip useful, consider giving it a ⭐ — it helps others discover the project.
+
+## License
+
+Apache License 2.0 — see [LICENSE](./LICENSE) for details.

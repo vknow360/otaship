@@ -1,66 +1,103 @@
-# OTAShip Backend
+# OTAShip — Backend
 
-The high-performance Go service that implements the Expo Updates protocol, manages OTA updates, and powers the Admin Dashboard.
+The Go API server that powers OTAShip. Handles update uploads, serves Expo-compatible manifests, manages rollouts, and talks to your storage provider.
 
-## Prerequisites
+→ [Back to main README](../README.md)
 
-To run or build the backend, you need:
-- Go 1.25+
-- PostgreSQL 16+
-- Storage provider account (Cloudinary or AWS S3/MinIO)
+## Tech Stack
 
-## Configuration
+| | |
+|---|---|
+| **Language** | Go 1.25+ |
+| **Router** | [go-chi/chi](https://github.com/go-chi/chi) |
+| **Database** | PostgreSQL 16+ via [pgx](https://github.com/jackc/pgx) connection pool |
+| **Query Generation** | [sqlc](https://sqlc.dev/) — type-safe SQL, no ORM |
+| **Migrations** | [golang-migrate](https://github.com/golang-migrate/migrate) — runs automatically on startup |
+| **Storage** | Pluggable: AWS S3 / MinIO / Cloudinary |
 
-The backend relies on environment variables. Copy `.env.example` to `.env` and configure the following variables:
+## What It Does
+
+The backend is the central piece of OTAShip:
+
+- **For the CLI:** Receives update bundles via `X-API-Key` authenticated uploads
+- **For the Dashboard:** Provides admin REST APIs (projects, updates, API keys, settings) secured with bearer tokens
+- **For the Expo App:** Serves signed manifests following the Expo Updates protocol, with percentage-based rollouts and channel targeting
+- **Internally:** Auto-runs database migrations, aggregates download stats daily, and serves interactive Swagger docs
+
+## Local Development
+
+> Requires Go 1.25+ and a running PostgreSQL instance.
+
+```bash
+cd backend
+cp .env.example .env
+# Edit .env with your database URL and storage credentials
+go run ./cmd/server
+```
+
+Migrations run automatically on startup. The server starts on `http://localhost:8080`.
+
+### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | **Yes** | PostgreSQL connection string (e.g., `postgresql://user:pass@host:5432/dbname?sslmode=disable`) |
-| `ADMIN_TOKEN_HASH` | **Yes** | A bcrypt hash of the secret token used to log into the Admin Dashboard |
-| `CLOUDINARY_*` | One of | `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_CLOUD_NAME` (if using Cloudinary) |
-| `S3_*` | One of | `S3_ACCESS_KEY`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`, `S3_BUCKET_NAME` (if using S3) |
-| `PORT` | No | Port to run the server on (default: `8080`) |
-| `ALLOWED_ORIGINS` | No | CORS allowed origins (default: `*`) |
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `ADMIN_TOKEN_HASH` | ✅ | SHA-256 hash of your admin password |
+| `PORT` | | Server port (default: `8080`) |
+| `S3_ACCESS_KEY` | ¹ | AWS/MinIO access key |
+| `S3_SECRET_ACCESS_KEY` | ¹ | AWS/MinIO secret key |
+| `S3_REGION` | ¹ | S3 region |
+| `S3_BUCKET_NAME` | ¹ | S3 bucket name |
+| `S3_ENDPOINT` | ¹ | Custom endpoint (for MinIO) |
+| `S3_BASE_PATH` | | Prefix path inside the bucket |
+| `CLOUDINARY_CLOUD_NAME` | ² | Cloudinary cloud name |
+| `CLOUDINARY_API_KEY` | ² | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | ² | Cloudinary API secret |
+| `EXPO_PRIVATE_KEY` | | RSA private key for manifest code signing |
+| `ALLOWED_ORIGINS` | | CORS origins, comma-separated (default: `*`) |
+| `LOG_FORMAT` | | `text` or `json` (default: `text`) |
+| `LOG_LEVEL` | | `debug`, `info`, `warn`, `error` (default: `debug`) |
 
-> **Pro-Tip for `ADMIN_TOKEN_HASH`:** 
-> You can generate a bcrypt hash for your chosen password using any online bcrypt generator or CLI tool.
+> ¹ Required if using S3/MinIO as storage provider
+> ² Required if using Cloudinary as storage provider
+> At least one storage provider must be configured.
 
-## Running Locally
+## API Documentation
 
-1. Start your local PostgreSQL instance and create the `otaship` database.
-2. Ensure your `.env` file is fully configured.
-3. Start the server:
-   ```bash
-   go run ./cmd/server
-   ```
-   *(The server will automatically execute database migrations on startup via the `golang-migrate` library.)*
+Interactive Swagger docs are available at:
 
-## Running with Docker
-
-From the root of the repository, you can run the entire backend and database stack using Docker Compose:
-
-```bash
-docker-compose up -d
+```
+http://localhost:8080/api/docs
 ```
 
-## API Overview
+The raw OpenAPI spec is served at `/api/openapi.yaml`.
 
-The backend exposes several sets of REST endpoints utilizing the `go-chi` router:
+## Project Structure
 
-- **Expo Client API (`/api/manifest/{project_id}`)**: Handles device requests for updates, serving standard or multipart Expo manifests based on the client protocol version.
-- **Project API (`/api/project/*`)**: Endpoints used by the OTAShip CLI to publish updates, upload asset bundles, and manage project metadata. Secured via per-project API keys.
-- **Admin API (`/api/admin/*`)**: Endpoints used by the Admin Dashboard to manage all projects, view analytics, and control storage configurations. Secured via the `ADMIN_TOKEN_HASH`.
-- **Validation**: `/api/validate-key` and `/api/project/me` for CLI authentication.
+```
+backend/
+├── cmd/server/          # Entry point, router setup, startup banner
+├── internal/
+│   ├── database/        # sqlc-generated Go code (do not edit manually)
+│   ├── handlers/        # HTTP route handlers (admin, project, manifest)
+│   ├── logger/          # Structured logging (slog) setup + middleware
+│   ├── middleware/       # Auth (admin bearer, API key), CORS, rate limiting
+│   ├── storage/         # Storage provider interfaces (S3, Cloudinary)
+│   └── utils/           # Shared helpers
+├── migrations/          # PostgreSQL schema migration files
+├── queries/             # Raw SQL queries (input for sqlc)
+├── openapi.yaml         # API specification
+└── sqlc.yaml            # sqlc configuration
+```
 
-## Key Design Decisions
+## Database Workflow
 
-- **SQLC**: Generates type-safe Go code directly from SQL queries for performance and compile-time safety.
-- **Smart Protocol Negotiation**: Can serve both standard JSON (Protocol 0) and `multipart/mixed` (Protocol 1) manifests depending on what the Expo client supports.
-- **Asset Hashing**: Computes SHA-256 hashes of all JS bundles and assets uploaded via the CLI to ensure integrity on the client side.
-- **ETag Caching**: Heavily caches manifests and respects `expo-current-update-id` headers to return `304 Not Modified`, saving massive amounts of bandwidth.
+OTAShip uses `sqlc` instead of an ORM — you write SQL, and sqlc generates type-safe Go code.
 
-## Known Limitations
+To make schema changes:
 
-- **Analytics Ingestion**: While the database supports `download_events` for tracking unique devices, the public endpoint for clients to report successful downloads is currently not implemented.
-- **Multi-Key Management**: The database schema supports multiple API keys per project, but the current API implementation only actively manages one primary key per project.
-- **Storage Cleanup**: Deleting an update from the database does not currently trigger a background job to delete the corresponding assets from S3 or Cloudinary.
+1. Add a new migration file in `migrations/`
+2. Update queries in `queries/`
+3. Run `sqlc generate` to regenerate `internal/database/`
+
+> Never edit files in `internal/database/` directly — they're overwritten on every `sqlc generate`.

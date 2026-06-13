@@ -221,6 +221,14 @@ paths:
         name: id
         required: true
         schema: { type: string, format: uuid }
+    get:
+      summary: Get update details
+      tags: [Admin - Updates]
+      security:
+        - AdminBearer: []
+      responses:
+        '200':
+          description: OK
     delete:
       summary: Delete an update
       tags: [Admin - Updates]
@@ -230,7 +238,35 @@ paths:
         '204':
           description: Deleted
 
-  /admin/updates/{id}/rollout:
+  /admin/updates/{id}/rollback:
+    post:
+      summary: Rollback to this update
+      tags: [Admin - Updates]
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
+
+  /admin/projects/{project_id}/rollback-to-embedded:
+    post:
+      summary: Rollback project to embedded binary
+      tags: [Admin - Projects]
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: path
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
     patch:
       summary: Update rollout percentage
       tags: [Admin - Updates]
@@ -386,6 +422,21 @@ paths:
       parameters:
         - in: path
           name: update_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
+
+  /project/{project_id}/rollback-to-embedded:
+    post:
+      summary: Create a rollback to embedded update
+      tags: [Project]
+      security:
+        - ProjectApiKey: []
+      parameters:
+        - in: path
+          name: project_id
           required: true
           schema: { type: string, format: uuid }
       responses:

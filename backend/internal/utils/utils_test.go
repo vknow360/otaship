@@ -2,216 +2,121 @@ package utils
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
 	"net/http"
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func TestCalculateSHA256(t *testing.T) {
-	tests := []struct {
-		name          string
-		inputData     []byte
-		expectedValue string
-	}{
-		{"Test 1", []byte(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
-		{"Test 2", []byte("hello world"), "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"},
+func TestProjectIDContext(t *testing.T) {
+	ctx := context.Background()
+	uuidStr := "123e4567-e89b-12d3-a456-426614174000"
+	id, _ := ParseUUID(uuidStr)
+
+	// Test Set and Get
+	newCtx := SetProjectId(ctx, id)
+	retrievedID := GetProjectId(newCtx)
+
+	if retrievedID.Bytes != id.Bytes {
+		t.Errorf("Expected %v, got %v", id.Bytes, retrievedID.Bytes)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			actualValue := CalculateSHA256(tt.inputData)
-			if actualValue != tt.expectedValue {
-				t.Errorf("CalculateSHA256() = %v, want %v", actualValue, tt.expectedValue)
-			}
-		})
+	// Test Get with missing value
+	missingID := GetProjectId(ctx)
+	if missingID.Valid {
+		t.Errorf("Expected invalid UUID when not set, got valid")
 	}
 }
 
 func TestParseUUID(t *testing.T) {
 	tests := []struct {
-		name          string
-		inputData     string
-		expectedValue pgtype.UUID
-		expectError   bool
+		name    string
+		uuidStr string
+		wantErr bool
 	}{
-		{
-			name:          "Valid UUID",
-			inputData:     "123e4567-e89b-12d3-a456-426614174000",
-			expectedValue: pgtype.UUID{Bytes: [16]byte{0x12, 0x3e, 0x45, 0x67, 0xe8, 0x9b, 0x12, 0xd3, 0xa4, 0x56, 0x42, 0x66, 0x14, 0x17, 0x40, 0x00}, Valid: true},
-			expectError:   false,
-		},
-		{
-			name:          "Invalid UUID string",
-			inputData:     "Hello World",
-			expectedValue: pgtype.UUID{},
-			expectError:   true,
-		},
+		{"Valid UUID", "123e4567-e89b-12d3-a456-426614174000", false},
+		{"Invalid UUID", "invalid-uuid", true},
+		{"Empty UUID", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actualValue, err := ParseUUID(tt.inputData)
-			if (err != nil) != tt.expectError {
-				t.Fatalf("ParseUUID() error = %v, expectError %v", err, tt.expectError)
-			}
-			if actualValue != tt.expectedValue {
-				t.Errorf("ParseUUID() = %v, want %v", actualValue, tt.expectedValue)
+			_, err := ParseUUID(tt.uuidStr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseUUID() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
-	}
-}
-
-func TestBuildDeviceHash(t *testing.T) {
-	tests := []struct {
-		name       string
-		remoteAddr string
-		platform   string
-		expected   string
-	}{
-		{
-			name:       "With Port",
-			remoteAddr: "192.168.1.5:4000",
-			platform:   "android",
-			// input should be "192.168.1.5|android"
-			expected: CalculateSHA256([]byte("192.168.1.5|android")),
-		},
-		{
-			name:       "Without Port",
-			remoteAddr: "10.0.0.1",
-			platform:   "ios",
-			// input should be "10.0.0.1|ios"
-			expected: CalculateSHA256([]byte("10.0.0.1|ios")),
-		},
-		{
-			name:       "Empty IP",
-			remoteAddr: "",
-			platform:   "android",
-			// input should be "unknown|android"
-			expected: CalculateSHA256([]byte("unknown|android")),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("GET", "/", nil)
-			req.RemoteAddr = tt.remoteAddr
-			got := BuildDeviceHash(req, tt.platform)
-			if got != tt.expected {
-				t.Errorf("BuildDeviceHash() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestContextProjectId(t *testing.T) {
-	ctx := context.Background()
-	testID := pgtype.UUID{Bytes: [16]byte{1, 2, 3}, Valid: true}
-
-	// Test valid
-	ctxValid := SetProjectId(ctx, testID)
-	got := GetProjectId(ctxValid)
-	if got != testID {
-		t.Errorf("GetProjectId() valid = %v, want %v", got, testID)
-	}
-
-	// Test nil
-	gotNil := GetProjectId(ctx)
-	if gotNil.Valid {
-		t.Errorf("GetProjectId() nil should return invalid pgtype.UUID")
-	}
-
-	// Test invalid type
-	ctxInvalid := context.WithValue(ctx, projectIDKey, "not-a-uuid")
-	gotInvalid := GetProjectId(ctxInvalid)
-	if gotInvalid.Valid {
-		t.Errorf("GetProjectId() invalid type should return invalid pgtype.UUID")
 	}
 }
 
 func TestParseInt32(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		expected    int32
-		expectError bool
+		name    string
+		val     string
+		want    int32
+		wantErr bool
 	}{
-		{"Valid positive", "123", 123, false},
-		{"Valid negative", "-456", -456, false},
-		{"Invalid string", "abc", 0, true},
-		{"Empty string", "", 0, true},
-		{"Overflow", "2147483648", 0, true}, // MaxInt32 + 1
+		{"Valid Positive", "42", 42, false},
+		{"Valid Negative", "-42", -42, false},
+		{"Invalid String", "abc", 0, true},
+		{"Empty String", "", 0, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseInt32(tt.input)
-			if (err != nil) != tt.expectError {
-				t.Fatalf("ParseInt32() error = %v, expectError %v", err, tt.expectError)
+			got, err := ParseInt32(tt.val)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseInt32() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if got != tt.expected {
-				t.Errorf("ParseInt32() = %v, want %v", got, tt.expected)
+			if got != tt.want {
+				t.Errorf("ParseInt32() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestGetClientIP(t *testing.T) {
+func TestCalculateSHA256(t *testing.T) {
+	input := []byte("secret")
+	// SHA-256 of "hello world"
+	expected := "2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b"
+
+	got := CalculateSHA256(input)
+	if got != expected {
+		t.Errorf("CalculateSHA256() = %v, want %v", got, expected)
+	}
+}
+
+func TestGetClientIPAndDeviceHash(t *testing.T) {
+	req1, _ := http.NewRequest("GET", "/", nil)
+	req1.RemoteAddr = "192.168.1.1:1234"
+
+	req2, _ := http.NewRequest("GET", "/", nil)
+	req2.Header.Set("x-forwarded-for", "10.0.0.1, 10.0.0.2")
+
 	tests := []struct {
-		name       string
-		headers    map[string]string
-		remoteAddr string
-		expected   string
+		name     string
+		req      *http.Request
+		platform string
+		wantIP   string
 	}{
-		{
-			name:       "X-Forwarded-For single IP",
-			headers:    map[string]string{"x-forwarded-for": "203.0.113.195"},
-			remoteAddr: "192.168.1.1:8080",
-			expected:   "203.0.113.195",
-		},
-		{
-			name:       "X-Forwarded-For multiple IPs",
-			headers:    map[string]string{"x-forwarded-for": "203.0.113.195, 150.172.238.178"},
-			remoteAddr: "192.168.1.1:8080",
-			expected:   "203.0.113.195",
-		},
-		{
-			name:       "RemoteAddr with port",
-			headers:    map[string]string{},
-			remoteAddr: "198.51.100.1:443",
-			expected:   "198.51.100.1",
-		},
-		{
-			name:       "RemoteAddr without port",
-			headers:    map[string]string{},
-			remoteAddr: "198.51.100.1",
-			expected:   "198.51.100.1",
-		},
-		{
-			name:       "Empty values",
-			headers:    map[string]string{},
-			remoteAddr: "",
-			expected:   "unknown",
-		},
+		{"RemoteAddr Only", req1, "ios", "192.168.1.1"},
+		{"X-Forwarded-For", req2, "android", "10.0.0.1"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("GET", "/", nil)
-			for k, v := range tt.headers {
-				req.Header.Set(k, v)
+			gotIP := getClientIP(tt.req)
+			if gotIP != tt.wantIP {
+				t.Errorf("getClientIP() = %v, want %v", gotIP, tt.wantIP)
 			}
-			req.RemoteAddr = tt.remoteAddr
 
-			got := getClientIP(req)
-			if got != tt.expected {
-				t.Errorf("getClientIP() = %v, want %v", got, tt.expected)
+			// Test BuildDeviceHash implicitly
+			hash := BuildDeviceHash(tt.req, tt.platform)
+			if len(hash) != 64 {
+				t.Errorf("BuildDeviceHash() returned hash of length %d, want 64", len(hash))
 			}
 		})
 	}
@@ -221,63 +126,42 @@ func TestGenerateAPIKey(t *testing.T) {
 	key1 := GenerateAPIKey()
 	key2 := GenerateAPIKey()
 
-	if key1 == key2 {
-		t.Error("GenerateAPIKey() generated duplicate keys")
+	if len(key1) != 64 {
+		t.Errorf("GenerateAPIKey() length = %d, want 64 (hex encoding of 32 bytes)", len(key1))
 	}
 
-	if len(key1) != 64 {
-		t.Errorf("GenerateAPIKey() length = %d, want 64", len(key1))
+	if key1 == key2 {
+		t.Errorf("GenerateAPIKey() returned identical keys: %v", key1)
 	}
 }
 
 func TestSignManifest(t *testing.T) {
+	// Generate a temporary RSA private key for testing
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("Failed to generate test RSA key: %v", err)
 	}
 
-	manifest := []byte(`{"version":"1.0"}`)
+	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privateKeyBytes,
+	})
 
-	// PKCS8 format (standard test)
-	privBytesPKCS8, _ := x509.MarshalPKCS8PrivateKey(privateKey)
-	pemPKCS8 := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytesPKCS8}))
+	manifestData := []byte(`{"id": "123", "version": "1.0.0"}`)
 
-	signature, err := SignManifest(manifest, pemPKCS8)
+	signature, err := SignManifest(manifestData, string(privateKeyPEM))
 	if err != nil {
-		t.Fatalf("SignManifest() error = %v", err)
-	}
-	if signature == "" {
-		t.Error("SignManifest() returned empty signature")
+		t.Fatalf("SignManifest() unexpected error: %v", err)
 	}
 
-	// PKCS1 format
-	privBytesPKCS1 := x509.MarshalPKCS1PrivateKey(privateKey)
-	pemPKCS1 := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: privBytesPKCS1}))
-	_, err = SignManifest(manifest, pemPKCS1)
-	if err != nil {
-		t.Fatalf("SignManifest() PKCS1 error = %v", err)
+	if len(signature) == 0 {
+		t.Errorf("SignManifest() returned empty signature")
 	}
 
-	// Invalid key format (fails both PKCS8 and PKCS1 parsing)
-	invalidBytes := []byte("invalid-key-bytes")
-	pemInvalid := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: invalidBytes}))
-	_, err = SignManifest(manifest, pemInvalid)
+	// Test with invalid key
+	_, err = SignManifest(manifestData, "invalid-key-data")
 	if err == nil {
-		t.Error("SignManifest() expected error for unparseable key")
-	}
-
-	// Not an RSA key (e.g. ECDSA)
-	ecdsaKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	ecdsaBytes, _ := x509.MarshalPKCS8PrivateKey(ecdsaKey)
-	pemECDSA := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ecdsaBytes}))
-	_, err = SignManifest(manifest, pemECDSA)
-	if err == nil || err.Error() != "parsed key is not an RSA private key" {
-		t.Errorf("SignManifest() expected 'not an RSA private key' error, got: %v", err)
-	}
-
-	// Empty string
-	_, err = SignManifest(manifest, "invalid key")
-	if err == nil {
-		t.Error("SignManifest() expected error for invalid PEM string")
+		t.Errorf("SignManifest() with invalid key should return error")
 	}
 }

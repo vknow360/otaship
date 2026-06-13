@@ -1,68 +1,113 @@
-# OTAShip Admin Dashboard
+# OTAShip — Admin Dashboard
 
-A beautiful, responsive web interface for managing your self-hosted OTAShip instance. Built with SvelteKit, this dashboard provides complete visibility and control over your OTA update pipeline.
+The web interface for managing your OTAShip instance. Built with SvelteKit and Tailwind CSS.
 
-## Features
+→ [Back to main README](../README.md)
 
-- **Project Management:** Create new projects and manage existing ones.
-- **Update History:** View a timeline of all published updates per project, including channels, platforms, and release dates.
-- **Access Control:** Generate, view, and revoke API keys used by the OTAShip CLI.
-- **Rollbacks:** Instantly revert broken releases directly from the web interface.
-- **Monitoring:** View configuration details, update metadata, and storage backend settings.
+## Screenshots
 
-## Prerequisites
+### Dashboard Overview
 
-- Node.js 18 or higher
-- `npm` or `pnpm` (pnpm is recommended)
-- A running instance of the OTAShip backend
+Global stats at a glance — total downloads, recent activity, distribution by channel and platform, and recent releases.
 
-## Setup
+<p align="center">
+  <img src="../.github/assets/dashboard_overview_1779900735585.png" alt="Dashboard Overview" width="700" />
+</p>
 
-### 1. Environment Variables
+### Projects
 
-Create a `.env` file in the root of the `admin-dashboard` directory by copying the example file:
+Create and manage your Expo projects. Each project gets its own API keys and update history.
+
+<p align="center">
+  <img src="../.github/assets/projects_page_1779900752986.png" alt="Projects Page" width="700" />
+</p>
+
+### Project Detail
+
+Per-project stats, manifest URL for your `app.json`, and release history with rollback controls.
+
+<p align="center">
+  <img src="../.github/assets/project_detail_1779900870068.png" alt="Project Detail — Stats and Manifest URL" width="700" />
+</p>
+
+### Settings
+
+Switch between storage providers and monitor storage usage and bandwidth.
+
+<p align="center">
+  <img src="../.github/assets/settings_page_1779900769732.png" alt="Settings Page" width="700" />
+</p>
+
+## Tech Stack
+
+| | |
+|---|---|
+| **Framework** | [SvelteKit](https://svelte.dev/docs/kit) (Svelte 5) |
+| **Styling** | [Tailwind CSS](https://tailwindcss.com/) v4 |
+| **Production** | [adapter-node](https://svelte.dev/docs/kit/adapter-node) (standalone Node.js server) |
+| **Package Manager** | pnpm |
+
+## What You Can Do
+
+The dashboard connects to the OTAShip backend REST API and gives you a visual interface for:
+
+- **Overview** — Total downloads, recent activity, distribution by channel and platform
+- **Projects** — Create, edit, delete projects; view per-project stats
+- **Releases** — Browse update history, trigger rollbacks, adjust rollout percentages
+- **API Keys** — Generate and revoke `X-API-Key` credentials for the CLI
+- **Settings** — View active storage provider and storage usage
+
+## Local Development
+
+> Requires Node.js 18+ and pnpm. The backend must be running.
 
 ```bash
+cd admin-dashboard
 cp .env.example .env
-```
-
-Configure the connection to your OTAShip backend:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PUBLIC_API_URL` | The base URL of your OTAShip backend API | `http://localhost:8080` |
-
-### 2. Installation
-
-Install the dependencies:
-
-```bash
-npm install
-# or
 pnpm install
-```
-
-### 3. Development Server
-
-Start the local development server:
-
-```bash
-npm run dev
-# or
 pnpm dev
 ```
-The dashboard will be available at `http://localhost:5173`. 
 
-To log in, use the plaintext password that corresponds to the `ADMIN_TOKEN_HASH` you configured in your backend's environment variables.
+The dashboard starts at `http://localhost:5173`.
 
-## Building for Production
+### Environment Variables
 
-To create an optimized production build of the dashboard:
+| Variable | Description |
+|----------|-------------|
+| `PUBLIC_API_URL` | URL of the OTAShip backend (default: `http://localhost:8080`) |
+| `ORIGIN` | The dashboard's own URL in production (e.g., `https://dashboard.yourdomain.com`). Required by SvelteKit to validate request origins — without it, you'll get CORS / 403 errors on form submissions. |
+
+### Authentication
+
+The dashboard uses bearer token authentication. When you log in, enter the plaintext password that corresponds to the `ADMIN_TOKEN_HASH` configured in your backend's `.env`.
+
+## Production Build
 
 ```bash
-npm run build
+pnpm build
+node build
 ```
 
-By default, the dashboard uses SvelteKit's `adapter-auto`. If you are deploying to a specific environment (like Node.js, Vercel, or Cloudflare Pages), you may need to install the corresponding SvelteKit adapter and update your `svelte.config.js`. 
+This compiles the SvelteKit app into a standalone Node.js server using `adapter-node`. The Docker Compose setup in the root repo handles this automatically.
 
-For example, to run the dashboard as a standalone Node.js server, switch to `@sveltejs/adapter-node`.
+## Project Structure
+
+```
+admin-dashboard/
+├── src/
+│   ├── routes/              # SvelteKit pages
+│   │   ├── login/           # Login page
+│   │   ├── projects/        # Project list + detail views
+│   │   ├── releases/        # Release history
+│   │   ├── settings/        # Storage and config settings
+│   │   └── +page.svelte     # Dashboard overview (home)
+│   ├── lib/                 # Shared components and utilities
+│   │   ├── api.js           # Backend API client
+│   │   ├── Sidebar.svelte   # Navigation sidebar
+│   │   ├── StatsGrid.svelte # Stats cards component
+│   │   └── ...              # Modals, buttons, and other components
+│   └── app.html             # Base HTML template
+├── static/                  # Favicon and static assets
+├── svelte.config.js         # SvelteKit config (adapter-node)
+└── package.json             # Dependencies
+```

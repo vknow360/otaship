@@ -2,19 +2,22 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type S3Provider struct {
-	s3     *s3.Client
-	bucket string
-	region string
+	s3       *s3.Client
+	bucket   string
+	region   string
+	basePath string
 }
 
 func NewS3Provider() (*S3Provider, error) {
@@ -22,7 +25,8 @@ func NewS3Provider() (*S3Provider, error) {
 	secretKey := os.Getenv("S3_SECRET_ACCESS_KEY")
 	region := os.Getenv("S3_REGION")
 	bucket := os.Getenv("S3_BUCKET_NAME")
-
+	endpoint := os.Getenv("S3_ENDPOINT")
+	basePath := os.Getenv("S3_BASE_PATH")
 	if accessKey == "" || secretKey == "" || region == "" || bucket == "" {
 		return nil, fmt.Errorf("missing s3 credentials")
 	}
@@ -39,9 +43,14 @@ func NewS3Provider() (*S3Provider, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := s3.NewFromConfig(cfg)
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if endpoint != "" {
+			o.BaseEndpoint = aws.String(endpoint)
+			o.UsePathStyle = true
+		}
+	})
 
-	return &S3Provider{s3: client, bucket: bucket, region: region}, nil
+	return &S3Provider{s3: client, bucket: bucket, region: region, basePath: basePath}, nil
 }
 
 func (s *S3Provider) Name() string {
@@ -65,6 +74,10 @@ func (s *S3Provider) Upload(
 
 	if err != nil {
 		return "", err
+	}
+
+	if s.basePath != "" {
+		return fmt.Sprintf("%s/%s/%s", s.basePath, s.bucket, key), nil
 	}
 
 	return fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", s.bucket, s.region, key), nil
@@ -106,7 +119,5 @@ func (s *S3Provider) Ping(ctx context.Context) error {
 }
 
 func (s *S3Provider) Usage(ctx context.Context) (any, error) {
-	return map[string]any{
-		"message": "not implemented yet",
-	}, nil
+	return nil, errors.New("Not implemented")
 }
