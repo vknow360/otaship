@@ -57,6 +57,3 @@ coverage/
 
 # Private keys & certs
 *.pem
-
-# Github
-.github/workflows
