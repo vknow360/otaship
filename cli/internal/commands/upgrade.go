@@ -120,10 +120,16 @@ func compareVersions(current, latest string) bool {
 }
 
 func findAsset(release *GitHubRelease) (*GitHubAsset, error) {
-	assetName := fmt.Sprintf("otaship-%s-%s", runtime.GOOS, runtime.GOARCH)
-	if runtime.GOOS == "windows" {
-		assetName += ".exe"
+	var assetName string
+	switch runtime.GOOS {
+	case "windows":
+		assetName = "otaship-cli.exe"
+	case "darwin":
+		assetName = "otaship-cli_mac"
+	default:
+		assetName = "otaship-cli"
 	}
+
 	for _, asset := range release.Assets {
 		if asset.Name == assetName {
 			return &asset, nil
