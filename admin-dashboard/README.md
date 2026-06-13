@@ -88,7 +88,7 @@ pnpm build
 node build
 ```
 
-This compiles the SvelteKit app into a standalone Node.js server using `adapter-node`. The Docker Compose setup in the root repo handles this automatically.
+This compiles the SvelteKit app into a standalone Node.js server using `adapter-node`. The default `docker-compose.yml` in the root repo uses pre-built images from GHCR. If you want to build the image locally, you can use the `docker-compose.dev.yml` file from the root repository.
 
 ## Project Structure
 

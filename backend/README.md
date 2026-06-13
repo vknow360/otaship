@@ -37,6 +37,13 @@ go run ./cmd/server
 
 Migrations run automatically on startup. The server starts on `http://localhost:8080`.
 
+Alternatively, you can run the backend and database via Docker Compose from the repository root:
+
+```bash
+# From the root directory
+docker compose -f docker-compose.dev.yml up -d
+```
+
 ### Environment Variables
 
 | Variable | Required | Description |

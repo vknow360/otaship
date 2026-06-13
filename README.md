@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/vknow360/otaship/actions/workflows/ci.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/vknow360/otaship/ci.yml?branch=dev&label=Build&logo=github" alt="Build">
+    <img src="https://img.shields.io/github/actions/workflow/status/vknow360/otaship/ci.yml?branch=main&label=Build&logo=github" alt="Build">
   </a>
   <img src="https://img.shields.io/badge/version-v0.2.0-green" alt="Version">
   <img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go">
@@ -54,6 +54,8 @@ You get a **Go backend**, a **SvelteKit admin dashboard**, a **CLI for publishin
 
 **Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and Docker Compose
 
+By default, the `docker-compose.yml` uses pre-built images from GitHub Container Registry (GHCR) for faster setup.
+
 ```bash
 # Clone the repo
 git clone https://github.com/vknow360/otaship.git && cd otaship
@@ -70,6 +72,14 @@ docker compose up -d
 That's it. The **API** is at `http://localhost:8080` and the **dashboard** at `http://localhost:3000`.
 
 > **Next steps:** Generate an admin token hash, configure your storage provider (S3 or Cloudinary), and create your first project through the dashboard. See the [Backend README](./backend/README.md) for environment variable details.
+
+### Building from Source
+
+If you want to build the Docker images locally from the source code, use the development compose file instead:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+```
 
 ## OTAShip vs EAS Updates
 
