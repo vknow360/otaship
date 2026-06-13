@@ -6,7 +6,11 @@ on:
       - 'v*'
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   release-cli:
+    needs: [ci]
     name: Build & Release CLI
     runs-on: ubuntu-latest
     permissions:
@@ -28,17 +32,20 @@ jobs:
           echo "version=$TAG" >> $GITHUB_OUTPUT
 
       - name: Make Build Scripts Executable
-        run: |
-          chmod +x cli/scripts/build.sh
+        working-directory: ./cli
+        run: chmod +x scripts/build.sh
 
       - name: Build Windows CLI
-        run: ./cli/scripts/build.sh windows ${{ steps.version.outputs.version }}
+        working-directory: ./cli
+        run: ./scripts/build.sh windows ${{ steps.version.outputs.version }}
 
       - name: Build macOS CLI
-        run: ./cli/scripts/build.sh mac ${{ steps.version.outputs.version }}
+        working-directory: ./cli
+        run: ./scripts/build.sh mac ${{ steps.version.outputs.version }}
 
       - name: Build Linux CLI
-        run: ./cli/scripts/build.sh linux ${{ steps.version.outputs.version }}
+        working-directory: ./cli
+        run: ./scripts/build.sh linux ${{ steps.version.outputs.version }}
 
       - name: Release to GitHub
         uses: softprops/action-gh-release@v2
@@ -52,6 +59,7 @@ jobs:
           generate_release_notes: true
 
   release-docker:
+    needs: [ci]
     name: Build & Push Docker Images
     runs-on: ubuntu-latest
     permissions:
