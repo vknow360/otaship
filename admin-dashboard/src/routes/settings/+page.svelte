@@ -62,7 +62,7 @@
 					class="block w-full rounded-md border border-neutral-700 bg-neutral-800 px-4 py-2 text-white shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none sm:text-sm"
 				>
 					{#if data.settings?.providers}
-						{#each data.settings.providers as provider}
+						{#each data.settings.providers as provider (provider)}
 							<option value={provider}
 								>{provider.charAt(0).toUpperCase() + provider.slice(1)}</option
 							>
@@ -99,7 +99,7 @@
 				</div>
 			{:then usage}
 				{#if usage}
-					{#each Object.entries(usage) as [provider, stats]}
+					{#each Object.entries(usage) as [provider, stats] (provider)}
 						<div
 							class="flex flex-col gap-3 rounded-xl border border-neutral-800 bg-neutral-900 p-6"
 						>

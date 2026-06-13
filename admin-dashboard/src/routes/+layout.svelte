@@ -6,7 +6,7 @@
 	let { children } = $props();
 </script>
 
-<div class="flex h-screen overflow-hidden bg-gray-950 text-white font-sans antialiased">
+<div class="flex h-screen overflow-hidden bg-gray-950 font-sans text-white antialiased">
 	{#if page.url.pathname !== '/login'}
 		<Sidebar />
 	{/if}

@@ -93,7 +93,7 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y divide-neutral-800">
-						{#each assets as asset}
+						{#each assets as asset (asset.file_name)}
 							<tr class="transition-colors hover:bg-white/[0.02]">
 								<td class="px-6 py-4 font-mono text-neutral-300">{asset.file_name}</td>
 								<td class="px-6 py-4 text-right font-mono">{formatBytes(asset.size)}</td>

@@ -1,6 +1,7 @@
 <script>
 	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import icon from '$lib/assets/icon-512.png';
 </script>
 
@@ -13,10 +14,10 @@
 		<div class="px-4">
 			<nav>
 				<ul>
-					{#each [{ href: '/', label: 'Overview' }, { href: '/projects', label: 'Projects' }, { href: '/settings', label: 'Settings' }] as link}
+					{#each [{ href: '/', label: 'Overview' }, { href: '/projects', label: 'Projects' }, { href: '/settings', label: 'Settings' }] as link (link.href)}
 						<li class="mb-2">
 							<a
-								href={link.href}
+								href={resolve(link.href)}
 								class="block rounded-lg px-4 py-2 transition-colors {page.url.pathname === link.href
 									? 'bg-white font-medium text-black'
 									: 'text-gray-400 hover:bg-gray-800 hover:text-white'}"

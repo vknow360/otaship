@@ -40,12 +40,12 @@ Switch between storage providers and monitor storage usage and bandwidth.
 
 ## Tech Stack
 
-| | |
-|---|---|
-| **Framework** | [SvelteKit](https://svelte.dev/docs/kit) (Svelte 5) |
-| **Styling** | [Tailwind CSS](https://tailwindcss.com/) v4 |
-| **Production** | [adapter-node](https://svelte.dev/docs/kit/adapter-node) (standalone Node.js server) |
-| **Package Manager** | pnpm |
+|                     |                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| **Framework**       | [SvelteKit](https://svelte.dev/docs/kit) (Svelte 5)                                  |
+| **Styling**         | [Tailwind CSS](https://tailwindcss.com/) v4                                          |
+| **Production**      | [adapter-node](https://svelte.dev/docs/kit/adapter-node) (standalone Node.js server) |
+| **Package Manager** | pnpm                                                                                 |
 
 ## What You Can Do
 
@@ -72,10 +72,10 @@ The dashboard starts at `http://localhost:5173`.
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `PUBLIC_API_URL` | URL of the OTAShip backend (default: `http://localhost:8080`) |
-| `ORIGIN` | The dashboard's own URL in production (e.g., `https://dashboard.yourdomain.com`). Required by SvelteKit to validate request origins — without it, you'll get CORS / 403 errors on form submissions. |
+| Variable         | Description                                                                                                                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_API_URL` | URL of the OTAShip backend (default: `http://localhost:8080`)                                                                                                                                       |
+| `ORIGIN`         | The dashboard's own URL in production (e.g., `https://dashboard.yourdomain.com`). Required by SvelteKit to validate request origins — without it, you'll get CORS / 403 errors on form submissions. |
 
 ### Authentication
 

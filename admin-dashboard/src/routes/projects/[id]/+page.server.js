@@ -7,13 +7,17 @@ export async function load({ cookies, params }) {
 		apiGet(`api/admin/projects/${params.id}`, token),
 		apiGet(`api/admin/projects/${params.id}/stats`, token),
 		apiGet(`api/admin/updates?project_id=${params.id}&limit=5`, token),
-		apiGet(`api/admin/projects/${params.id}/keys`, token),
+		apiGet(`api/admin/projects/${params.id}/keys`, token)
 	]);
 
-	if (projectRes.status === 'rejected') console.error('[Project Load Error] Project call failed:', projectRes.reason);
-	if (statsRes.status === 'rejected') console.error('[Project Load Error] Stats call failed:', statsRes.reason);
-	if (updatesRes.status === 'rejected') console.error('[Project Load Error] Updates call failed:', updatesRes.reason);
-	if (apiKeysRes.status === 'rejected') console.error('[Project Load Error] API Keys call failed:', apiKeysRes.reason);
+	if (projectRes.status === 'rejected')
+		console.error('[Project Load Error] Project call failed:', projectRes.reason);
+	if (statsRes.status === 'rejected')
+		console.error('[Project Load Error] Stats call failed:', statsRes.reason);
+	if (updatesRes.status === 'rejected')
+		console.error('[Project Load Error] Updates call failed:', updatesRes.reason);
+	if (apiKeysRes.status === 'rejected')
+		console.error('[Project Load Error] API Keys call failed:', apiKeysRes.reason);
 
 	return {
 		project: projectRes?.status === 'fulfilled' ? projectRes.value : null,

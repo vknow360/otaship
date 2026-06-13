@@ -1,5 +1,6 @@
 <script>
-	let { updates = [], token, projectId, showControls = true } = $props();
+	import { resolve } from '$app/paths';
+	let { updates = [], projectId, showControls = true } = $props();
 </script>
 
 <div class="mt-10 overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900">
@@ -9,7 +10,7 @@
 		</h2>
 		{#if projectId}
 			<a
-				href={`/projects/${projectId}/releases`}
+				href={resolve(`/projects/${projectId}/releases`)}
 				class="text-xs text-neutral-500 transition-colors hover:text-white">View All Activity</a
 			>
 		{/if}
@@ -80,7 +81,7 @@
 							<div class="flex items-center gap-2">
 								<a
 									title="View details"
-									href={`/projects/${projectId}/releases/${update.id}`}
+									href={resolve(`/projects/${projectId}/releases/${update.id}`)}
 									class="ml-auto rounded p-2 text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-white"
 								>
 									<svg

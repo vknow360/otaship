@@ -1,6 +1,7 @@
 <script>
 	import { apiDelete } from '$lib/api';
 	import { invalidateAll, goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	let { updateId, token, redirect } = $props();
 	let isDeleting = $state(false);
@@ -18,7 +19,7 @@
 		try {
 			await apiDelete(`api/admin/updates/${updateId}`, token);
 			if (redirect) {
-				await goto(redirect);
+				await goto(resolve(redirect));
 			} else {
 				await invalidateAll();
 			}

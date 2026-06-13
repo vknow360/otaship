@@ -6,7 +6,9 @@
 	let isDeleting = $state(false);
 
 	async function handleDelete() {
-		const confirmed = window.confirm("Are you sure you want to delete this API key? This action cannot be undone.");
+		const confirmed = window.confirm(
+			'Are you sure you want to delete this API key? This action cannot be undone.'
+		);
 		if (!confirmed) return;
 
 		isDeleting = true;
@@ -14,7 +16,7 @@
 			await apiDelete(`api/admin/projects/${projectId}/keys/${keyId}`, token);
 			await invalidateAll();
 		} catch (err) {
-			alert("Failed to delete API key: " + err.message);
+			alert('Failed to delete API key: ' + err.message);
 		} finally {
 			isDeleting = false;
 		}
@@ -37,7 +39,7 @@
 		stroke-width="2"
 		stroke-linecap="round"
 		stroke-linejoin="round"
-		class={isDeleting ? "animate-spin" : ""}
+		class={isDeleting ? 'animate-spin' : ''}
 	>
 		{#if isDeleting}
 			<path d="M21 12a9 9 0 1 1-6.219-8.56" />

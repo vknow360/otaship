@@ -1,5 +1,6 @@
 <script>
 	import { afterNavigate } from '$app/navigation';
+	import { resolve } from '$app/paths';
 
 	let { data } = $props();
 
@@ -101,16 +102,25 @@
 								</div>
 
 								<div class="flex flex-col items-center">
-									<span class="font-mono font-bold text-white">{update.download_count?.toLocaleString() || '0'}</span>
+									<span class="font-mono font-bold text-white"
+										>{update.download_count?.toLocaleString() || '0'}</span
+									>
 									<span class="text-[10px] text-neutral-600 uppercase">Downloads</span>
 								</div>
 
 								<div class="flex items-center gap-2">
-									<a 
-										href={`/projects/${data.projectId}/releases/${update.id}`} 
-										class="ml-auto rounded p-2 text-neutral-500 hover:bg-neutral-800 hover:text-white transition-colors"
+									<a
+										href={resolve(`/projects/${data.projectId}/releases/${update.id}`)}
+										class="ml-auto rounded p-2 text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-white"
 									>
-										<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<svg
+											width="20"
+											height="20"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+										>
 											<polyline points="9 18 15 12 9 6"></polyline>
 										</svg>
 									</a>
@@ -126,7 +136,9 @@
 	{#if data.total > data.limit}
 		<div class="mt-6 flex items-center justify-between">
 			<a
-				href={`/projects/${data.projectId}/releases?limit=${data.limit}&offset=${previousOffset}`}
+				href={resolve(
+					`/projects/${data.projectId}/releases?limit=${data.limit}&offset=${previousOffset}`
+				)}
 				aria-disabled={!hasPreviousPage}
 				class={`rounded-md border px-4 py-2 text-sm transition ${
 					hasPreviousPage
@@ -145,7 +157,9 @@
 			</p>
 
 			<a
-				href={`/projects/${data.projectId}/releases?limit=${data.limit}&offset=${nextOffset}`}
+				href={resolve(
+					`/projects/${data.projectId}/releases?limit=${data.limit}&offset=${nextOffset}`
+				)}
 				aria-disabled={!hasNextPage}
 				class={`rounded-md border px-4 py-2 text-sm transition ${
 					hasNextPage

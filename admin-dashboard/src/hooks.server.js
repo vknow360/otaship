@@ -6,7 +6,7 @@ export async function handle({ event, resolve }) {
 
 	const protectedRoutes = ['/', '/releases', '/projects', '/settings'];
 	const isProtected = protectedRoutes.some(
-		path => event.url.pathname === path || event.url.pathname.startsWith(path + '/')
+		(path) => event.url.pathname === path || event.url.pathname.startsWith(path + '/')
 	);
 
 	let redirectTarget = null;
@@ -18,13 +18,17 @@ export async function handle({ event, resolve }) {
 
 	if (redirectTarget) {
 		const duration = Date.now() - start;
-		console.log(`[SvelteKit] ${event.request.method} ${event.url.pathname} -> 303 Redirect to ${redirectTarget} (${duration}ms)`);
+		console.log(
+			`[SvelteKit] ${event.request.method} ${event.url.pathname} -> 303 Redirect to ${redirectTarget} (${duration}ms)`
+		);
 		throw redirect(303, redirectTarget);
 	}
 
 	const response = await resolve(event);
 	const duration = Date.now() - start;
-	console.log(`[SvelteKit] ${event.request.method} ${event.url.pathname} -> ${response.status} (${duration}ms)`);
+	console.log(
+		`[SvelteKit] ${event.request.method} ${event.url.pathname} -> ${response.status} (${duration}ms)`
+	);
 	return response;
 }
 

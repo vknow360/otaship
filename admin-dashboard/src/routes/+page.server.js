@@ -5,7 +5,7 @@ export async function load({ cookies }) {
 
 	const [statsRes, updatesRes] = await Promise.allSettled([
 		apiGet('api/admin/stats', token),
-		apiGet('api/admin/updates?limit=10', token),
+		apiGet('api/admin/updates?limit=10', token)
 	]);
 
 	if (statsRes.status === 'rejected') {
@@ -17,6 +17,6 @@ export async function load({ cookies }) {
 
 	return {
 		stats: statsRes.status === 'fulfilled' ? statsRes.value : null,
-		updates: updatesRes.status === 'fulfilled' ? updatesRes.value : null,
+		updates: updatesRes.status === 'fulfilled' ? updatesRes.value : null
 	};
 }

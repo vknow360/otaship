@@ -17,13 +17,17 @@
 			<p class="mt-2 text-sm text-neutral-500">Sign in to dashboard</p>
 		</div>
 
-		<form method="POST" use:enhance={() => {
-			loading = true;
-			return async ({ update }) => {
-				await update();
-				loading = false;
-			};
-		}} class="space-y-4">
+		<form
+			method="POST"
+			use:enhance={() => {
+				loading = true;
+				return async ({ update }) => {
+					await update();
+					loading = false;
+				};
+			}}
+			class="space-y-4"
+		>
 			<div>
 				<label for="adminToken" class="mb-4 text-neutral-500">Enter admin token</label>
 				<input
